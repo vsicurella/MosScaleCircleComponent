@@ -19,8 +19,6 @@ add_library(MosScaleCircleComponent STATIC
     Source/NoteNames.cpp
 )
 
-juce_generate_juce_header(MosScaleCircleComponent)
-
 target_include_directories(MosScaleCircleComponent
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/Source>

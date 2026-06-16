@@ -9,7 +9,7 @@
 */
 
 #pragma once
-#include <JuceHeader.h>
+#include <juce_gui_basics/juce_gui_basics.h>
 
 /*
 	Takes an array and tries to arrange it symmetrically, such that the array can be wrapped into a symmetric circle
