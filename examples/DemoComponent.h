@@ -28,6 +28,9 @@ private:
     ScaleStructure scale;
     std::unique_ptr<ScaleStructureComponent> editor;
 
+    // Needed for the wheel's handle tooltips to appear.
+    juce::TooltipWindow tooltipWindow { this };
+
     juce::TextButton modeButton { "Colour mode" };
     juce::ToggleButton alwaysGroupNumsToggle  { "Always show group numbers" };
     juce::ToggleButton highlightToggle        { "Highlight on mouse over" };

@@ -658,6 +658,10 @@ void GroupingCircle::mouseMove(const MouseEvent& event)
 		if (highlightShowsGroupNumber)
 			refreshGroupLabelVisibility();
 
+		// Show a resize cursor while hovering a group-resize / new-group handle.
+		setMouseCursor(handleMouseOver > -1 ? MouseCursor::LeftRightResizeCursor
+		                                    : MouseCursor::NormalCursor);
+
 		repaint();
 	}
 }
@@ -1199,6 +1203,15 @@ void GroupingCircle::launchColourPicker()
 
 String GroupingCircle::getTooltip()
 {
+	// Handle-specific hints take priority when hovering a group-resize / new-group handle.
+	if (handleMouseOver > -1 && handleMouseOver < groupHandles.size())
+	{
+		if (groupHandles.getUnchecked(handleMouseOver)->addsGroupWhenDragged())
+			return "Drag to split off a new group";
+
+		return "Drag to resize this group and its neighbour";
+	}
+
 	return "Drag the degree ring to change the offset, drag a group edge to resize, "
 	       "or right-click to assign colours.";
 }
