@@ -1,0 +1,21 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "type": "cmake",
+            "label": "CMake: build demo",
+            "command": "build",
+            "targets": [
+                "MosScaleCircleDemo"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "detail": "Build the MOS Scale Circle demo app via CMake Tools."
+        }
+    ]
+}

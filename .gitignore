@@ -5,8 +5,15 @@ out/
 
 # IDE files
 .vs/
-.vscode/
 .idea/
+
+# VS Code: ignore local cruft but keep the shared CMake/launch config
+.vscode/*
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/extensions.json
+
 *.user
 *.suo
 *.ncb

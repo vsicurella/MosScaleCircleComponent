@@ -1,0 +1,10 @@
+{
+    // Configure the demo target so the CMake Tools Build/Run/Debug buttons can see it.
+    // JUCE is located by the fallback logic in CMakeLists.txt (or set JUCE_PATH below).
+    "cmake.sourceDirectory": "${workspaceFolder}",
+    "cmake.buildDirectory": "${workspaceFolder}/build",
+    "cmake.generator": "Ninja",
+    "cmake.configureSettings": {
+        "MOSSC_BUILD_DEMO": "ON"
+    }
+}
