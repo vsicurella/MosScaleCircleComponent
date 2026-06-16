@@ -160,6 +160,14 @@ void NumberSelector::showNameLabel(bool toShow)
 	//repaint();
 }
 
+void NumberSelector::setTooltip(juce::String tooltip)
+{
+	if (rangeValueLabel)
+		rangeValueLabel->setTooltip(tooltip);
+	if (listValueLabel)
+		listValueLabel->setTooltip(tooltip);
+}
+
 // Sets the value regardless of range/list. Index will be set to 0 if number is out of bounds
 void NumberSelector::setValue(int valueIn, bool sendNotification)
 {

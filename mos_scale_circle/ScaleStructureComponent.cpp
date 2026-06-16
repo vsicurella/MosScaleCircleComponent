@@ -68,11 +68,13 @@ void ScaleStructureComponent::buildComponent()
 	periodSlider->showNameLabel();
 	periodSlider->setRange(5, 275, true, false);
 	periodSlider->addListener(this);
+	periodSlider->setTooltip("How many unique scale degrees there are. Usually this is divisions of the octave.");
 
 	generatorSlider.reset(new NumberSelector("Generator", NumberSelector::SelectionType::List));
 	addAndMakeVisible(generatorSlider.get());
 	generatorSlider->showNameLabel();
 	generatorSlider->addListener(this);
+	generatorSlider->setTooltip("The interval to build your scale with. Only certain numbers are allowed so the full scale is produced.");
 
 	generatorLookAndFeel.reset(new TransparentDropDown());
 	// TODO: add SSC colour ids
@@ -97,6 +99,7 @@ void ScaleStructureComponent::buildComponent()
 	addAndMakeVisible(sizeSelector.get());
 	sizeSelector->showNameLabel();
 	sizeSelector->addListener(this);
+	sizeSelector->setTooltip("The size of your 'nominal' scale (for example, the diatonic scale is 7, pentatonic is 5).");
 
 	sizeLookAndFeel.reset(new TransparentDropDown());
 	sizeLookAndFeel->setBaseColour(seedColour);
@@ -116,12 +119,13 @@ void ScaleStructureComponent::buildComponent()
 	offsetLabel.reset(new Label("offsetLabel"));
 	offsetLabel->setJustificationType(Justification::centred);
 	offsetLabel->setColour(Label::ColourIds::textColourId, Colours::white);
+	offsetLabel->setTooltip("How many generators to offset the first scale degree by, which controls the 'mode' of the scale (ie. lydian, ionian).");
 	addAndMakeVisible(offsetLabel.get());
 
 	// TODO: add SSC component colour ids
 	//periodFactorLookAndFeel.setBaseColour(findColour(ColourIds::backgroundColourId));
 	periodFactorButton.reset(new ShapeButton("periodFactorButton", Colours::white, Colours::white.contrasting(0.125f), Colours::white.contrasting(0.25f)));
-	periodFactorButton->setTooltip("Number of periods.");
+	periodFactorButton->setTooltip("How many times the scale pattern repeats per period.");
 	addChildComponent(periodFactorButton.get());
 	periodFactorButton->addListener(this);
 

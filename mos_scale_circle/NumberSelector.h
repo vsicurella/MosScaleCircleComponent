@@ -116,6 +116,8 @@ public:
 	void setNamePlacement(NamePlacement placementIn);
 	void showNameLabel(bool toShow = true);
 
+	void setTooltip(juce::String tooltip);
+
 	// Recolours the value text, name label and increment/decrement arrows.
 	// (For List type, the value text colour also comes from the list LookAndFeel.)
 	void setTextColour(Colour newColour);

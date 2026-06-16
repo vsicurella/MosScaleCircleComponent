@@ -1211,9 +1211,9 @@ String GroupingCircle::getTooltip()
 
 		return "Drag to resize this group and its neighbour";
 	}
-
-	return "Drag the degree ring to change the offset, drag a group edge to resize, "
-	       "or right-click to assign colours.";
+	return String();
+	// return "Drag the degree ring to change the offset, drag a group edge to resize, "
+	//        "or right-click to assign colours.";
 }
 
 void GroupingCircle::degreeToModSelectedCallback(int degreeIndex)
