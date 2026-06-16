@@ -10,7 +10,7 @@
 
 #pragma once
 
-#include <juce_gui_basics/juce_gui_basics.h>
+#include <JuceHeader.h>
 #include "ScaleStructure.h"
 #include "GroupHandle.h"
 #include "NoteNames.h"

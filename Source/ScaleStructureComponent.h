@@ -20,7 +20,7 @@
 #pragma once
 
 //[Headers]     -- You can add your own extra header files here --
-#include <juce_gui_basics/juce_gui_basics.h>
+#include <JuceHeader.h>
 
 #include "NumberSelector.h"
 #include "GroupingCircle.h"

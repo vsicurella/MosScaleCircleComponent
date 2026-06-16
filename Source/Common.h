@@ -9,7 +9,7 @@
 */
 
 #pragma once
-#include <juce_gui_basics/juce_gui_basics.h>
+#include <JuceHeader.h>
 
 const double PI = 3.14159265359f;
 
