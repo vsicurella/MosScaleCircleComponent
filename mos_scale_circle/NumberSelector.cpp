@@ -227,6 +227,38 @@ void NumberSelector::setListLookAndFeel(LookAndFeel* newLookAndFeel)
 		listValueLabel->setLookAndFeel(newLookAndFeel);
 }
 
+void NumberSelector::setTextColour(Colour newColour)
+{
+	setColour(valueTextColourId, newColour);
+	setColour(valueTextColourMouseOverColourId, newColour.contrasting(0.1f));
+	setColour(buttonTextColourId, newColour);
+	setColour(buttonTextMouseOverColourId, newColour.contrasting(0.1f));
+	setColour(buttonTextMouseDownColourId, newColour.contrasting(0.25f));
+
+	if (titleLabel)
+		titleLabel->setColour(Label::ColourIds::textColourId, newColour);
+
+	if (rangeValueLabel)
+		rangeValueLabel->setColour(Label::ColourIds::textColourId, newColour);
+
+	if (listValueLabel)
+		listValueLabel->setColour(ComboBox::ColourIds::textColourId, newColour);
+
+	// ArrowButton's colour is fixed at construction, so recreate the arrows in the new colour.
+	const float arrowDirection = (orientation == Horizontal) ? 0.0f : 0.25f;
+
+	incrementButton.reset(new ArrowButton("incrementButton", arrowDirection, newColour));
+	addAndMakeVisible(incrementButton.get());
+	incrementButton->addListener(this);
+
+	decrementButton.reset(new ArrowButton("decrementButton", arrowDirection + 0.5f, newColour));
+	addAndMakeVisible(decrementButton.get());
+	decrementButton->addListener(this);
+
+	resized();
+	repaint();
+}
+
 void NumberSelector::addListener(Listener* listenerIn)
 {
 	listeners.add(listenerIn);

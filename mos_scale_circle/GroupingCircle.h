@@ -49,6 +49,13 @@ public:
 	void setNoteNameSystem(NoteNames* noteNamesIn);
 	void setShowNoteLabels(bool showLabels);
 
+	// Display toggles (see members for defaults).
+	void setAlwaysShowGroupNumbers(bool shouldShow);     // show group-size numbers even when not dragging
+	void setHighlightOnMouseOver(bool shouldHighlight);  // recolour the hovered group/degree
+	void setHighlightShowsGroupNumber(bool shouldShow);  // reveal the hovered group's number label
+	void setShowGroupResizeControls(bool shouldShow);    // show the draggable group-edge handles
+	void setShowGroups(bool shouldShow);                 // show the outer group ring (else only the degree ring)
+
 	void degreeToModSelectedCallback(int degreeIndex);
 	void cancelDegreeMods();
 
@@ -126,7 +133,17 @@ private:
 
 	NoteNames* noteNames = nullptr;
 	bool showNoteNameLabels = false;
-	
+
+	// Display toggles.
+	bool alwaysShowGroupNumbers = false;
+	bool highlightOnMouseOver = true;
+	bool highlightShowsGroupNumber = true;
+	bool showGroupResizeControls = true;
+	bool showGroups = true;
+
+	// Applies alwaysShowGroupNumbers / showGroups to the group-size labels.
+	void refreshGroupLabelVisibility();
+
 	// MODMOS functionality
 	int degreeIndexToMod = -1;
 	Array<Point<int>> degreeModCandidates;

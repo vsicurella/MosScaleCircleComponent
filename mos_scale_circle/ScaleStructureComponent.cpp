@@ -174,10 +174,13 @@ void ScaleStructureComponent::paint (Graphics& g)
 
     //[UserPaint] Add your own custom painting code here..
 
-	// Offset Label arrows
-	g.setColour(Colours::white);
-	PathStrokeType strokeType(1.0f);
-	g.strokePath(offsetArrows, strokeType);
+	// Offset Label arrows (part of the parameter UI)
+	if (showParameters)
+	{
+		g.setColour(Colours::white);
+		PathStrokeType strokeType(1.0f);
+		g.strokePath(offsetArrows, strokeType);
+	}
     //[/UserPaint]
 }
 
@@ -203,6 +206,8 @@ void ScaleStructureComponent::resized()
 	offsetLabel->setSize(offsetLabel->getFont().getStringWidth("Offset") * 2, offsetLabel->getFont().getHeight() * 3);
 	offsetLabel->setCentrePosition(circle->getIntPointFromCenter(circle->getInnerRadius() * 7.0f / 8.0f, 0));
 
+	// Default (group ring shown): the Scale Size selector sits in the group ring at the top.
+	// The groups-hidden override below relocates it into the hub.
 	sizeSelector->setSize(proportionOfWidth(0.175f), (circle->getOuterRadius() - circle->getMiddleRadius()) * 7.0f / 8.0f);
 	sizeSelector->setCentrePosition(circle->getIntPointFromCenter((circle->getOuterRadius() + circle->getMiddleRadius()) / 2.025f, 0));
 
@@ -225,6 +230,34 @@ void ScaleStructureComponent::resized()
 
 	stepSizePatternLbl->setSize(getWidth(), proportionOfHeight(0.15f));
 	stepSizePatternLbl->setCentrePosition(circle->getIntPointFromCenter(circle->getInnerRadius() * 4.0 / 7.0f, MathConstants<float>::pi));
+
+	// Group ring hidden: rebalance the hub into a symmetric stack and slot the Scale Size
+	// selector between the Offset label (top) and the Period control.
+	if (!showGroups)
+	{
+		const float inner = circle->getInnerRadius();
+		const float pi = MathConstants<float>::pi;
+
+		// Preserve the groups-shown spacing of Period / Generator / cents / steps; just shift the
+		// whole cluster straight down by a fixed amount to free room above Period for Scale Size.
+		const int shift = roundToInt(inner * 0.18f);
+
+		periodSlider->setCentrePosition(circle->getIntPointFromCenter(inner * 0.4f, 0).translated(0, shift));
+		generatorSlider->setCentrePosition(circle->getIntPointFromCenter(inner * 0.125f, pi).translated(0, shift));
+		generatorValueLbl->setCentrePosition(circle->getIntPointFromCenter(inner * 3.0f / 7.0f, pi).translated(0, shift));
+		stepSizePatternLbl->setCentrePosition(circle->getIntPointFromCenter(inner * 4.0f / 7.0f, pi).translated(0, shift));
+
+		// Scale Size sits in the freed space between the Offset label and the (shifted) Period control.
+		sizeSelector->setSize(proportionOfWidth(0.2f), proportionOfHeight(0.12f));
+		sizeSelector->setCentrePosition(circle->getIntPointFromCenter(inner * 0.55f, 0));
+
+		// Re-place the period-factor button next to the moved Period control.
+		const float periodFBtnSize = periodSlider->getHeight() / 8.0f;
+		periodFactorButtonShape.clear();
+		periodFactorButtonShape.addEllipse(periodSlider->getRight(), periodSlider->getY(), periodFBtnSize, periodFBtnSize);
+		periodFactorButton->setShape(periodFactorButtonShape, true, true, true);
+		periodFactorButton->setTopLeftPosition(periodSlider->getPosition().translated(periodSlider->getWidth() * 4 / 5.0f, 0));
+	}
 
     //[/UserResized]
 }
@@ -378,6 +411,80 @@ void ScaleStructureComponent::refreshColours()
 {
 	if (circle != nullptr)
 		circle->repaint();
+}
+
+//==============================================================================
+// Display toggles
+
+void ScaleStructureComponent::setShowParameters(bool shouldShow)
+{
+	showParameters = shouldShow;
+
+	periodSlider->setVisible(shouldShow);
+	generatorSlider->setVisible(shouldShow);
+	sizeSelector->setVisible(shouldShow);
+	generatorValueLbl->setVisible(shouldShow);
+	stepSizePatternLbl->setVisible(shouldShow);
+	offsetLabel->setVisible(shouldShow);
+
+	if (shouldShow)
+		updatePeriodFactors();          // restores the period-factor button per factor count
+	else
+		periodFactorButton->setVisible(false);
+
+	repaint();                          // the offset arrows are painted only when shown
+}
+
+void ScaleStructureComponent::setAlwaysShowGroupNumbers(bool shouldShow)
+{
+	if (circle != nullptr)
+		circle->setAlwaysShowGroupNumbers(shouldShow);
+}
+
+void ScaleStructureComponent::setHighlightOnMouseOver(bool shouldHighlight)
+{
+	if (circle != nullptr)
+		circle->setHighlightOnMouseOver(shouldHighlight);
+}
+
+void ScaleStructureComponent::setHighlightShowsGroupNumber(bool shouldShow)
+{
+	if (circle != nullptr)
+		circle->setHighlightShowsGroupNumber(shouldShow);
+}
+
+void ScaleStructureComponent::setShowGroupResizeControls(bool shouldShow)
+{
+	if (circle != nullptr)
+		circle->setShowGroupResizeControls(shouldShow);
+}
+
+void ScaleStructureComponent::setShowGroups(bool shouldShow)
+{
+	showGroups = shouldShow;
+	if (circle != nullptr)
+		circle->setShowGroups(shouldShow);
+	applySizeSelectorColours();   // dark text on the ring, white text in the hub
+	resized();                    // the Scale Size selector moves into the hub when groups are hidden
+}
+
+void ScaleStructureComponent::applySizeSelectorColours()
+{
+	if (showGroups)
+	{
+		Colour seed = scaleStructure.getGroupColour(0);
+		if (seed.isTransparent())
+			seed = Colours::grey;
+
+		sizeSelector->setTextColour(seed.contrasting(0.8f));
+		sizeLookAndFeel->setBaseColour(seed);
+	}
+	else
+	{
+		Colour hubBase = Colours::darkgrey;
+		sizeSelector->setTextColour(Colours::white);
+		sizeLookAndFeel->setBaseColour(hubBase);
+	}
 }
 
 //==============================================================================

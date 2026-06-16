@@ -128,13 +128,22 @@ public:
     static void renderToFile (const juce::String& path)
     {
         DemoComponent demo;
+        demo.setSize (900, 720);   // triggers layout of children
 
-        if (path.containsIgnoreCase ("bygroup"))
-            demo.setColourMode (ScaleStructure::ColourMode::ByGroup);
+        if (path.containsIgnoreCase ("bygroup"))   demo.setColourMode (ScaleStructure::ColourMode::ByGroup);
+        if (path.containsIgnoreCase ("groupnums")) demo.getEditor().setAlwaysShowGroupNumbers (true);
+        if (path.containsIgnoreCase ("nogroups"))  demo.getEditor().setShowGroups (false);
+        if (path.containsIgnoreCase ("noparams"))  demo.getEditor().setShowParameters (false);
 
-        demo.setSize (760, 800);   // triggers layout of children
-
-        auto image = demo.createComponentSnapshot (demo.getLocalBounds());
+        // Render the wheel onto the app's dark background so white hub text is visible.
+        auto& editor = demo.getEditor();
+        auto bounds = editor.getLocalBounds();
+        juce::Image image (juce::Image::ARGB, bounds.getWidth(), bounds.getHeight(), true);
+        {
+            juce::Graphics g (image);
+            g.fillAll (juce::Colour (0xff32363f));
+            editor.paintEntireComponent (g, false);
+        }
 
         juce::File file (path);
         file.deleteFile();

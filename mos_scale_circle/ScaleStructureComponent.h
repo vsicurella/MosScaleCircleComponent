@@ -88,6 +88,15 @@ public:
 	// Repaints the grouping circle after the colour scheme was edited externally.
 	void refreshColours();
 
+	// Display toggles. setShowParameters hides this component's slider/dropdown/label controls
+	// (leaving just the wheel); the rest forward to the grouping circle.
+	void setShowParameters(bool shouldShow);
+	void setAlwaysShowGroupNumbers(bool shouldShow);
+	void setHighlightOnMouseOver(bool shouldHighlight);
+	void setHighlightShowsGroupNumber(bool shouldShow);
+	void setShowGroupResizeControls(bool shouldShow);
+	void setShowGroups(bool shouldShow);
+
 	void updateGenerators();
 	void updateScaleSizes();
 	void updatePeriodFactors();
@@ -148,10 +157,17 @@ private:
 	Array<Colour> ownedDegreeOverrides;
 	bool ownsColourTables = false;
 
+	bool showParameters = true;
+	bool showGroups = true;
+
 	// Shared construction body + colour-table maintenance.
 	void buildComponent();
 	void ensureColourTablesSized();
 	static Colour defaultGroupColour(int groupIndex);
+
+	// Styles the Scale Size selector for the current layout: dark text on the group ring,
+	// white text when relocated into the (dark) hub with groups hidden.
+	void applySizeSelectorColours();
 
 	// Components
 	std::unique_ptr<NumberSelector> generatorSlider;

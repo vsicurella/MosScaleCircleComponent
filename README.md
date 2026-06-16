@@ -84,6 +84,18 @@ circle.setColourPickerLauncher([](juce::Rectangle<int> area, juce::Colour curren
 Colours are intentionally **not** part of the parameter tree; they have their own
 `groupColourChanged` / `degreeColourChanged` notifications on the wheel.
 
+## Display options
+
+`ScaleStructureComponent` exposes toggles (the last four forward to the wheel):
+
+```cpp
+editor.setShowParameters(true);           // sliders/dropdowns/labels (default on; off = wheel only)
+editor.setAlwaysShowGroupNumbers(false);  // group-size numbers even when not dragging (default off)
+editor.setHighlightOnMouseOver(true);     // recolour the hovered group/degree (default on)
+editor.setShowGroupResizeControls(true);  // draggable group-edge handles (default on)
+editor.setShowGroups(true);               // outer group ring; off = only the degree ring (default on)
+```
+
 ## Demo
 
 ```sh

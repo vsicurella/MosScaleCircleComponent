@@ -18,6 +18,7 @@ public:
     ~DemoComponent() override;
 
     void setColourMode (ScaleStructure::ColourMode mode);
+    ScaleStructureComponent& getEditor()  { return *editor; }
 
     void resized() override;
 
@@ -28,6 +29,12 @@ private:
     std::unique_ptr<ScaleStructureComponent> editor;
 
     juce::TextButton modeButton { "Colour mode" };
+    juce::ToggleButton alwaysGroupNumsToggle  { "Always show group numbers" };
+    juce::ToggleButton highlightToggle        { "Highlight on mouse over" };
+    juce::ToggleButton highlightGroupNumToggle { "Highlight shows group number" };
+    juce::ToggleButton showParamsToggle       { "Show parameters" };
+    juce::ToggleButton showResizeToggle       { "Show group resize controls" };
+    juce::ToggleButton showGroupsToggle       { "Show groups" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DemoComponent)
 };

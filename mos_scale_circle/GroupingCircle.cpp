@@ -143,6 +143,8 @@ void GroupingCircle::updateGenerator()
 
 	groupSectorMouseOver = -1;
 
+	refreshGroupLabelVisibility();
+
 	resized();
 	repaint();
 }
@@ -159,6 +161,53 @@ void GroupingCircle::setShowNoteLabels(bool showLabels)
 	repaint();
 }
 
+void GroupingCircle::setAlwaysShowGroupNumbers(bool shouldShow)
+{
+	alwaysShowGroupNumbers = shouldShow;
+	refreshGroupLabelVisibility();
+	repaint();
+}
+
+void GroupingCircle::setHighlightOnMouseOver(bool shouldHighlight)
+{
+	highlightOnMouseOver = shouldHighlight;
+	repaint();
+}
+
+void GroupingCircle::setHighlightShowsGroupNumber(bool shouldShow)
+{
+	highlightShowsGroupNumber = shouldShow;
+	refreshGroupLabelVisibility();
+	repaint();
+}
+
+void GroupingCircle::setShowGroupResizeControls(bool shouldShow)
+{
+	showGroupResizeControls = shouldShow;
+	if (!shouldShow)
+		handleMouseOver = -1;
+	repaint();
+}
+
+void GroupingCircle::setShowGroups(bool shouldShow)
+{
+	showGroups = shouldShow;
+	refreshGroupLabelVisibility();
+	resized();   // recompute radii so the degree ring fills the outer area when groups are hidden
+	repaint();
+}
+
+void GroupingCircle::refreshGroupLabelVisibility()
+{
+	for (int i = 1; i < groupSizeLabels.size(); i++)
+	{
+		const bool visible = showGroups
+			&& (alwaysShowGroupNumbers
+				|| (highlightShowsGroupNumber && i == groupSectorMouseOver));
+		groupSizeLabels[i]->setVisible(visible);
+	}
+}
+
 void GroupingCircle::paint (Graphics& g)
 {
 	g.fillAll(Colour());
@@ -173,23 +222,27 @@ void GroupingCircle::paint (Graphics& g)
 	int degIndex = 0;
 	for (int i = 0; i < groupArcPaths.size(); i++)
 	{
-		// Draw groups
+		// Resolve the group colour (also used as the fallback for degrees in this group).
 		Path& groupPath = groupArcPaths.getReference(i);
 		groupColour = scaleStructure.getGroupColour(i);
 
 		if (groupColour.isTransparent())
 			groupColour = Colours::lightgrey;
 
-		if (i == groupSectorMouseOver && !handleBeingDragged)
+		if (highlightOnMouseOver && i == groupSectorMouseOver && !handleBeingDragged)
 			groupColour = groupColour.contrasting(highlightContrastRatio);
 
-		g.setColour(groupColour);
-		g.fillPath(groupPath);
+		// Draw the group ring only when groups are shown.
+		if (showGroups)
+		{
+			g.setColour(groupColour);
+			g.fillPath(groupPath);
 
-		g.setColour(Colours::black);
-		g.strokePath(groupPath, solidStroke);
+			g.setColour(Colours::black);
+			g.strokePath(groupPath, solidStroke);
 
-		groupSizeLabels[i]->setColour(Label::ColourIds::textColourId, groupColour.contrasting(labelContrastRatio));
+			groupSizeLabels[i]->setColour(Label::ColourIds::textColourId, groupColour.contrasting(labelContrastRatio));
+		}
 
 		// Draw degrees
 		for (int d = 0; d < groupSizes[i]; d++)
@@ -206,7 +259,7 @@ void GroupingCircle::paint (Graphics& g)
 				degreeColour = groupColour.contrasting(Colours::mediumvioletred, 1.0f / 3);
 			}
 
-			if (degIndex == degreeSectorMouseOver && !handleBeingDragged)
+			if (highlightOnMouseOver && degIndex == degreeSectorMouseOver && !handleBeingDragged)
 				degreeColour = degreeColour.contrasting(highlightContrastRatio);
 
 			Path& degreePath = degreeArcPaths.getReference(degIndex);
@@ -222,7 +275,8 @@ void GroupingCircle::paint (Graphics& g)
 		}
 	}
 
-	if (handleBeingDragged || mouseRadius >= degreeOuterRadius && mouseRadius < groupOuterRadius)
+	if (showGroups && showGroupResizeControls
+		&& (handleBeingDragged || (mouseRadius >= degreeOuterRadius && mouseRadius < groupOuterRadius)))
 	{
 		// Draw edge handles
 		for (int i = 0; i < groupHandles.size(); i++)
@@ -278,8 +332,10 @@ void GroupingCircle::resized()
 {
 	center = Point<float>(getWidth() / 2.0f, getHeight() / 2.0f);
 
-	groupRingWidth = getWidth() * groupWidthRatio;
-	degreeRingWidth = getWidth() * degreeWidthRatio;
+	// When the group ring is hidden, collapse its width so the degree ring fills the outer area,
+	// and thicken the degree arcs by ~33% to use the freed space.
+	groupRingWidth = showGroups ? getWidth() * groupWidthRatio : 0.0f;
+	degreeRingWidth = getWidth() * degreeWidthRatio * (showGroups ? 1.0f : 1.33f);
 
 	groupOuterRadius = getWidth() * borderRatio / 2.0f;
 	degreeOuterRadius = groupOuterRadius - groupRingWidth;
@@ -560,26 +616,29 @@ void GroupingCircle::mouseMove(const MouseEvent& event)
 			}
 
 			// check if over a handle
-			int handleIndex;
-			for (handleIndex = 0; handleIndex < groupHandles.size(); handleIndex++)
+			if (showGroupResizeControls)
 			{
-				GroupHandle* handle = groupHandles.getUnchecked(handleIndex);
-
-				// TODO: improve detecting?
-				if (handle->isMouseOver(event))
+				int handleIndex;
+				for (handleIndex = 0; handleIndex < groupHandles.size(); handleIndex++)
 				{
-					handleMouseOver = handleIndex;
+					GroupHandle* handle = groupHandles.getUnchecked(handleIndex);
+
+					// TODO: improve detecting?
+					if (handle->isMouseOver(event))
+					{
+						handleMouseOver = handleIndex;
+						dirty = true;
+						break;
+					}
+				}
+
+				if (handleIndex >= groupHandles.size())
+				{
+					handleMouseOver = -1;
 					dirty = true;
-					break;
 				}
 			}
 
-			if (handleIndex >= groupHandles.size())
-			{
-				handleMouseOver = -1;
-				dirty = true;
-			}
-			
 		}
 	}
 	
@@ -594,7 +653,13 @@ void GroupingCircle::mouseMove(const MouseEvent& event)
 
 	// TODO: implement ring sectors as components so only certain ones need to be repainted
 	if (dirty)
+	{
+		// Reveal the hovered group's number label when that option is enabled.
+		if (highlightShowsGroupNumber)
+			refreshGroupLabelVisibility();
+
 		repaint();
+	}
 }
 
 void GroupingCircle::mouseDown(const MouseEvent& event)
@@ -1005,12 +1070,10 @@ void GroupingCircle::mouseUp(const MouseEvent& event)
 			updateGenerator();
 		}
 
-		// Restore original text and hide group size labels after drag
+		// Restore original text after drag; visibility honours the always-show / showGroups toggles.
 		for (int i = 1; i < groupSizeLabels.size(); i++)
-		{
 			groupSizeLabels[i]->setText(String(groupSizes[i]), dontSendNotification);
-			groupSizeLabels[i]->setVisible(false);
-		}
+		refreshGroupLabelVisibility();
 
 		handleBeingDragged = nullptr;
 		handleDraggedToDegIndex = -1;

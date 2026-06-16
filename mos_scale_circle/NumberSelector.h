@@ -116,6 +116,10 @@ public:
 	void setNamePlacement(NamePlacement placementIn);
 	void showNameLabel(bool toShow = true);
 
+	// Recolours the value text, name label and increment/decrement arrows.
+	// (For List type, the value text colour also comes from the list LookAndFeel.)
+	void setTextColour(Colour newColour);
+
 	// Sets the value regardless of range/list. Index will be set to 0 if number is out of bounds
 	void setValue(int valueIn, bool sendNotification=true);
 
