@@ -9,7 +9,6 @@
 */
 
 #pragma once
-#include <JuceHeader.h>
 
 class TransparentDropDown : public LookAndFeel_V4
 {

@@ -8,15 +8,18 @@
   ==============================================================================
 */
 
-#include <JuceHeader.h>
 #include "GroupingCircle.h"
 
 //==============================================================================
-GroupingCircle::GroupingCircle(const ScaleStructure& structureIn, Array<Colour>& groupColoursIn)
-	:	scaleStructure(structureIn),
-		colourTable(groupColoursIn)
+GroupingCircle::GroupingCircle(const ScaleStructure& structureIn)
+	:	scaleStructure(structureIn)
 {
 
+}
+
+void GroupingCircle::setColourPickerLauncher(ColourPickerLauncher launcherIn)
+{
+	colourPickerLauncher = std::move(launcherIn);
 }
 
 GroupingCircle::~GroupingCircle()
@@ -172,7 +175,7 @@ void GroupingCircle::paint (Graphics& g)
 	{
 		// Draw groups
 		Path& groupPath = groupArcPaths.getReference(i);
-		groupColour = colourTable[i];
+		groupColour = scaleStructure.getGroupColour(i);
 
 		if (groupColour.isTransparent())
 			groupColour = Colours::lightgrey;
@@ -191,7 +194,11 @@ void GroupingCircle::paint (Graphics& g)
 		// Draw degrees
 		for (int d = 0; d < groupSizes[i]; d++)
 		{
-			degreeColour = groupColour;
+			// Resolve the degree's colour (handles both ByGroup and ByDegree modes);
+			// fall back to the group colour if unresolved.
+			degreeColour = scaleStructure.getDegreeColour(groupChain[degIndex]);
+			if (degreeColour.isTransparent())
+				degreeColour = groupColour;
 
 			if (degreeIndexToMod > -1 && isDegreeSectorIndexModCandidate(degIndex))
 			{
@@ -200,7 +207,7 @@ void GroupingCircle::paint (Graphics& g)
 			}
 
 			if (degIndex == degreeSectorMouseOver && !handleBeingDragged)
-				degreeColour = groupColour.contrasting(highlightContrastRatio);
+				degreeColour = degreeColour.contrasting(highlightContrastRatio);
 
 			Path& degreePath = degreeArcPaths.getReference(degIndex);
 			
@@ -235,7 +242,10 @@ void GroupingCircle::paint (Graphics& g)
 	int edgePath = 0;
 	for (auto index : highlightedDegreeEdges)
 	{
-		g.setColour(colourTable[scaleStructure.getGroupOfDegreeIndex(index)].contrasting(0.75f));
+		Colour edgeBase = scaleStructure.getGroupColour(scaleStructure.getGroupOfDegreeIndex(index));
+		if (edgeBase.isTransparent())
+			edgeBase = Colours::lightgrey;
+		g.setColour(edgeBase.contrasting(0.75f));
 		g.drawDashedLine(highlightedEdgeLines[edgePath], dashPattern, 2, 2.0f);
 
 		edgePath++;
@@ -643,6 +653,19 @@ void GroupingCircle::mouseDown(const MouseEvent& event)
 					showNames = !showNames;
 				});
 
+				// Per-degree colour assignment is only meaningful in ByDegree mode.
+				if (scaleStructure.getColourMode() == ScaleStructure::ColourMode::ByDegree)
+				{
+					degreeMenu.addSeparator();
+					degreeMenu.addItem("Assign degree colour...", true, false, [this, degree]() {
+						openColourPickerForDegree(degree);
+					});
+					degreeMenu.addItem("Reset degree colour", scaleStructure.hasDegreeColourOverride(degree), false, [this, degree]() {
+						listeners.call(&Listener::degreeColourChanged, degree, Colour());
+						repaint();
+					});
+				}
+
 				degreeMenu.showMenuAsync(options);
 			}
 
@@ -657,9 +680,24 @@ void GroupingCircle::mouseDown(const MouseEvent& event)
 		// If mouse in a group area
 		else if (mouseRadius < groupOuterRadius)
 		{
+			// Right-click on a group sector: offer to assign that group's colour.
+			if (event.mods.isRightButtonDown())
+			{
+				int degSector = degreeSectorOfAngle(getNormalizedMouseAngle(event));
+				int groupIndex = (degSector >= 0) ? mouseInGroupSector(degSector) : -1;
+				if (groupIndex >= 0)
+				{
+					groupMenu.clear();
+					groupMenu.addItem("Assign group colour...", true, false, [this, groupIndex]() {
+						openColourPickerForGroup(groupIndex);
+					});
+					groupMenu.showMenuAsync(PopupMenu::Options().withMaximumNumColumns(1));
+				}
+			}
+
 			// TODO: move most calculations to ScaleStructure class
 			// Show possible degrees to drag handle to
-			if (handleMouseOver > -1)
+			else if (handleMouseOver > -1)
 			{
 				handleBeingDragged = groupHandles[handleMouseOver];
 
@@ -990,6 +1028,116 @@ void GroupingCircle::addListener(Listener* listenerToAdd)
 void GroupingCircle::removeListener(Listener* listenerToRemove)
 {
 	listeners.remove(listenerToRemove);
+}
+
+//==============================================================================
+// Colour picker
+
+namespace
+{
+	// Wraps a juce::ColourSelector for use in a CallOutBox and forwards live colour
+	// changes to a callback. This is the built-in fallback when no launcher is set.
+	class ColourSelectorCallout : public Component,
+	                              private ChangeListener
+	{
+	public:
+		ColourSelectorCallout(Colour initialColour, std::function<void (Colour)> onColourIn)
+			: onColour(std::move(onColourIn))
+		{
+			selector.setCurrentColour(initialColour, dontSendNotification);
+			selector.addChangeListener(this);
+			addAndMakeVisible(selector);
+			setSize(260, 300);
+		}
+
+		~ColourSelectorCallout() override
+		{
+			selector.removeChangeListener(this);
+		}
+
+		void resized() override { selector.setBounds(getLocalBounds()); }
+
+	private:
+		void changeListenerCallback(ChangeBroadcaster*) override
+		{
+			if (onColour)
+				onColour(selector.getCurrentColour());
+		}
+
+		ColourSelector selector { ColourSelector::showColourAtTop | ColourSelector::showSliders | ColourSelector::showColourspace };
+		std::function<void (Colour)> onColour;
+	};
+}
+
+void GroupingCircle::openColourPickerForGroup(int groupIndex)
+{
+	colourTargetGroup = groupIndex;
+	colourTargetDegree = -1;
+	launchColourPicker();
+}
+
+void GroupingCircle::openColourPickerForDegree(int degreeIndex)
+{
+	colourTargetGroup = -1;
+	colourTargetDegree = degreeIndex;
+	launchColourPicker();
+}
+
+void GroupingCircle::launchColourPicker()
+{
+	// The target's current colour and section bounds (in this component's coordinates).
+	Colour current = Colours::white;
+	Rectangle<int> area;
+
+	if (colourTargetDegree >= 0)
+	{
+		current = scaleStructure.getDegreeColour(colourTargetDegree);
+		int visualIndex = groupChain.indexOf(colourTargetDegree);
+		if (visualIndex >= 0 && visualIndex < degreeArcPaths.size())
+			area = degreeArcPaths.getReference(visualIndex).getBounds().toNearestInt();
+	}
+	else if (colourTargetGroup >= 0 && colourTargetGroup < groupArcPaths.size())
+	{
+		current = scaleStructure.getGroupColour(colourTargetGroup);
+		area = groupArcPaths.getReference(colourTargetGroup).getBounds().toNearestInt();
+	}
+
+	if (current.isTransparent())
+		current = Colours::white;
+
+	if (area.isEmpty())
+		area = getLocalBounds().withSizeKeepingCentre(20, 20);
+
+	// Capture the targets by value so the callback is robust to later state changes.
+	const int targetGroup = colourTargetGroup;
+	const int targetDegree = colourTargetDegree;
+
+	auto onPicked = [this, targetGroup, targetDegree](Colour chosen)
+	{
+		if (targetGroup >= 0)
+			listeners.call(&Listener::groupColourChanged, targetGroup, chosen);
+		else if (targetDegree >= 0)
+			listeners.call(&Listener::degreeColourChanged, targetDegree, chosen);
+
+		repaint();
+	};
+
+	// Prefer the host-supplied launcher; otherwise show the built-in ColourSelector.
+	if (colourPickerLauncher)
+	{
+		colourPickerLauncher(area, current, onPicked);
+		return;
+	}
+
+	Rectangle<int> screenArea = area.translated(getScreenPosition().x, getScreenPosition().y);
+	CallOutBox::launchAsynchronously(std::make_unique<ColourSelectorCallout>(current, onPicked),
+	                                 screenArea, nullptr);
+}
+
+String GroupingCircle::getTooltip()
+{
+	return "Drag the degree ring to change the offset, drag a group edge to resize, "
+	       "or right-click to assign colours.";
 }
 
 void GroupingCircle::degreeToModSelectedCallback(int degreeIndex)

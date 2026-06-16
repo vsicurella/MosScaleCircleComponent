@@ -20,7 +20,6 @@
 #pragma once
 
 //[Headers]     -- You can add your own extra header files here --
-#include <JuceHeader.h>
 
 #include "NumberSelector.h"
 #include "GroupingCircle.h"
@@ -43,11 +42,19 @@
 class ScaleStructureComponent  : public Component,
                                  private NumberSelector::Listener,
                                  private GroupingCircle::Listener,
-                                 private Button::Listener
+                                 private Button::Listener,
+                                 private ScaleStructure::Listener
 {
 public:
     //==============================================================================
-    ScaleStructureComponent (ScaleStructure& scaleStructureIn, Array<Colour>& colourTableIn);
+    // Primary constructor: colours resolved ByDegree. The component owns and manages internal
+    // colour tables (seeded with a default palette) unless the host wires its own tables into
+    // the ScaleStructure directly.
+    ScaleStructureComponent (ScaleStructure& scaleStructureIn);
+
+    // Backward-compatible constructor: colours resolved ByGroup using the caller-owned table.
+    ScaleStructureComponent (ScaleStructure& scaleStructureIn, Array<Colour>& groupColourTableIn);
+
     ~ScaleStructureComponent() override;
 
     //==============================================================================
@@ -64,8 +71,22 @@ public:
 	void groupingSplit(int groupIndex, int sizeChangeAmount) override;
 	void groupingResized(int groupIndex, int sizeChangeAmount, bool draggedClockwise) override;
 	void groupingsMerged(int groupIndex) override;
+	void groupColourChanged(int groupIndex, Colour newColour) override;
+	void degreeColourChanged(int degreeIndex, Colour newColour) override;
+
+	// ScaleStructure::Listener - keeps the UI in sync when the scale parameters change,
+	// including changes pushed in by an external controller (follower mode).
+	void scaleStructurePeriodChanged() override;
+	void scaleStructureGeneratorChanged() override;
+	void scaleStructureOffsetChanged() override;
+	void scaleStructureSizeChanged() override;
+	void scaleStructureGroupingChanged() override;
+	void scaleStructureAlterationsChanged() override;
 
 	void loadScaleStructureSettings();
+
+	// Repaints the grouping circle after the colour scheme was edited externally.
+	void refreshColours();
 
 	void updateGenerators();
 	void updateScaleSizes();
@@ -118,9 +139,19 @@ private:
 
 	// Functional Elements
 	ScaleStructure& scaleStructure;
-	Array<Colour>& colourTable;
 	GroupingCircle* circle;
 	NoteNames noteNames;
+
+	// Colour tables owned by this component when it manages colours itself (primary ctor).
+	// When the host wires its own tables into the ScaleStructure, these stay unused.
+	Array<Colour> ownedGroupColours;
+	Array<Colour> ownedDegreeOverrides;
+	bool ownsColourTables = false;
+
+	// Shared construction body + colour-table maintenance.
+	void buildComponent();
+	void ensureColourTablesSized();
+	static Colour defaultGroupColour(int groupIndex);
 
 	// Components
 	std::unique_ptr<NumberSelector> generatorSlider;

@@ -27,13 +27,36 @@
 //[/MiscUserDefs]
 
 //==============================================================================
-ScaleStructureComponent::ScaleStructureComponent (ScaleStructure& scaleStructureIn, Array<Colour>& colourTableIn)
-    : scaleStructure(scaleStructureIn), colourTable(colourTableIn), noteNames(scaleStructureIn)
+ScaleStructureComponent::ScaleStructureComponent (ScaleStructure& scaleStructureIn)
+    : scaleStructure(scaleStructureIn), noteNames(scaleStructureIn)
 {
-    //[Constructor_pre] You can add your own custom stuff here..
-    //[/Constructor_pre]
+    // This component owns its colour tables and resolves colours ByDegree by default.
+    ownsColourTables = true;
+    for (int i = 0; i < 12; ++i)
+        ownedGroupColours.add(defaultGroupColour(i));
 
-    circleComponent.reset (new GroupingCircle (scaleStructure, colourTable));
+    scaleStructure.setColourMode(ScaleStructure::ColourMode::ByDegree);
+    scaleStructure.setGroupColourTable(ownedGroupColours);
+    scaleStructure.setDegreeOverrideTable(ownedDegreeOverrides);
+
+    buildComponent();
+}
+
+ScaleStructureComponent::ScaleStructureComponent (ScaleStructure& scaleStructureIn, Array<Colour>& groupColourTableIn)
+    : scaleStructure(scaleStructureIn), noteNames(scaleStructureIn)
+{
+    // Backward-compatible path: colours come from the caller-owned table, resolved ByGroup.
+    scaleStructure.setColourMode(ScaleStructure::ColourMode::ByGroup);
+    scaleStructure.setGroupColourTable(groupColourTableIn);
+
+    buildComponent();
+}
+
+void ScaleStructureComponent::buildComponent()
+{
+    ensureColourTablesSized();
+
+    circleComponent.reset (new GroupingCircle (scaleStructure));
     addAndMakeVisible (circleComponent.get());
     circleComponent->setName ("circleComponent");
 
@@ -66,15 +89,17 @@ ScaleStructureComponent::ScaleStructureComponent (ScaleStructure& scaleStructure
 	generatorValueLbl->setColour(TextEditor::backgroundColourId, Colour(0x00000000));
 	generatorValueLbl->setInterceptsMouseClicks(false, false);
 
-	sizeSelector.reset(new NumberSelector("Scale Size", NumberSelector::SelectionType::List, colourTable[0].contrasting(0.8f)));
-	//sizeSelector->setColour(NumberSelector::ColourIds::valueTextColourId, colourTable[0].contrasting(1.0));
-	/*sizeSelector->setColour(NumberSelector::ColourIds::, colourTable[0].contrasting(1.0));*/
+	Colour seedColour = scaleStructure.getGroupColour(0);
+	if (seedColour.isTransparent())
+		seedColour = Colours::grey;
+
+	sizeSelector.reset(new NumberSelector("Scale Size", NumberSelector::SelectionType::List, seedColour.contrasting(0.8f)));
 	addAndMakeVisible(sizeSelector.get());
 	sizeSelector->showNameLabel();
 	sizeSelector->addListener(this);
 
 	sizeLookAndFeel.reset(new TransparentDropDown());
-	sizeLookAndFeel->setBaseColour(colourTable.getReference(0));
+	sizeLookAndFeel->setBaseColour(seedColour);
 	sizeLookAndFeel->setColour(PopupMenu::ColourIds::backgroundColourId, Colour());
 	sizeLookAndFeel->setColour(ComboBox::ColourIds::textColourId, sizeSelector->findColour(NumberSelector::ColourIds::valueTextColourId));
 	sizeSelector->setLookAndFeel(sizeLookAndFeel.get());
@@ -109,6 +134,9 @@ ScaleStructureComponent::ScaleStructureComponent (ScaleStructure& scaleStructure
 	circle->setNoteNameSystem(&noteNames);
 
 	loadScaleStructureSettings();
+
+	// Observe the model so external (follower-mode) parameter changes refresh the UI.
+	scaleStructure.addListener(this);
     //[/UserPreSize]
 
     setSize (600, 600);
@@ -121,6 +149,7 @@ ScaleStructureComponent::ScaleStructureComponent (ScaleStructure& scaleStructure
 ScaleStructureComponent::~ScaleStructureComponent()
 {
     //[Destructor_pre]. You can add your own custom destruction code here..
+	scaleStructure.removeListener(this);
 	listeners.clear();
     //[/Destructor_pre]
 
@@ -165,10 +194,10 @@ void ScaleStructureComponent::resized()
 	periodSlider->setCentrePosition(circle->getIntPointFromCenter(circle->getInnerRadius() * 0.4f, 0));
 
 	generatorSlider->setSize(proportionOfWidth(0.2f), proportionOfHeight(0.155f));
-	generatorSlider->setCentrePosition(circle->getIntPointFromCenter(circle->getInnerRadius() * 0.125f, float_Pi));
+	generatorSlider->setCentrePosition(circle->getIntPointFromCenter(circle->getInnerRadius() * 0.125f, MathConstants<float>::pi));
 
-	generatorValueLbl->setCentrePosition(circle->getIntPointFromCenter(circle->getInnerRadius() * 2.0f / 3.0f, float_Pi * 11.0f / 8.0f));
-	stepSizePatternLbl->setCentrePosition(circle->getIntPointFromCenter(circle->getInnerRadius() * 2.0f / 3.0f, float_Pi * 5.0f / 8.0f));
+	generatorValueLbl->setCentrePosition(circle->getIntPointFromCenter(circle->getInnerRadius() * 2.0f / 3.0f, MathConstants<float>::pi * 11.0f / 8.0f));
+	stepSizePatternLbl->setCentrePosition(circle->getIntPointFromCenter(circle->getInnerRadius() * 2.0f / 3.0f, MathConstants<float>::pi * 5.0f / 8.0f));
 
 	offsetLabel->setFont(Font().withHeight(getHeight() / 48.0f));
 	offsetLabel->setSize(offsetLabel->getFont().getStringWidth("Offset") * 2, offsetLabel->getFont().getHeight() * 3);
@@ -180,10 +209,10 @@ void ScaleStructureComponent::resized()
 	// TODO: add other part of arrow / improve drawing
 	offsetArrows.clear();
 	Rectangle<float> offsetLabelCircleBounds = circle->getInnerCircleBounds().reduced(circle->getInnerRadius() / 13.0f);
-	GroupingCircle::addArcToPath(offsetArrows, offsetLabelCircleBounds, float_Pi / 24, float_Pi / 12, true);
-	offsetArrows.lineTo(circle->getFloatPointFromCenter(circle->getInnerRadius() * 13.0f / 14.0f, float_Pi / 14));
-	GroupingCircle::addArcToPath(offsetArrows, offsetLabelCircleBounds, -float_Pi / 24, -float_Pi / 12, true);
-	offsetArrows.lineTo(circle->getFloatPointFromCenter(circle->getInnerRadius() * 13.0f / 14.0f, -float_Pi / 14));
+	GroupingCircle::addArcToPath(offsetArrows, offsetLabelCircleBounds, MathConstants<float>::pi / 24, MathConstants<float>::pi / 12, true);
+	offsetArrows.lineTo(circle->getFloatPointFromCenter(circle->getInnerRadius() * 13.0f / 14.0f, MathConstants<float>::pi / 14));
+	GroupingCircle::addArcToPath(offsetArrows, offsetLabelCircleBounds, -MathConstants<float>::pi / 24, -MathConstants<float>::pi / 12, true);
+	offsetArrows.lineTo(circle->getFloatPointFromCenter(circle->getInnerRadius() * 13.0f / 14.0f, -MathConstants<float>::pi / 14));
 
 	float periodFBtnSize = periodSlider->getHeight() / 8.0f;
 	periodFactorButtonShape.clear();
@@ -192,10 +221,10 @@ void ScaleStructureComponent::resized()
 	periodFactorButton->setTopLeftPosition(periodSlider->getPosition().translated(periodSlider->getWidth() * 4 / 5.0f, 0));
 
 	generatorValueLbl->setSize(getWidth(), proportionOfHeight(0.15f));
-	generatorValueLbl->setCentrePosition(circle->getIntPointFromCenter(circle->getInnerRadius() * 3.0f / 7.0f, float_Pi));
+	generatorValueLbl->setCentrePosition(circle->getIntPointFromCenter(circle->getInnerRadius() * 3.0f / 7.0f, MathConstants<float>::pi));
 
 	stepSizePatternLbl->setSize(getWidth(), proportionOfHeight(0.15f));
-	stepSizePatternLbl->setCentrePosition(circle->getIntPointFromCenter(circle->getInnerRadius() * 4.0 / 7.0f, float_Pi));
+	stepSizePatternLbl->setCentrePosition(circle->getIntPointFromCenter(circle->getInnerRadius() * 4.0 / 7.0f, MathConstants<float>::pi));
 
     //[/UserResized]
 }
@@ -311,6 +340,7 @@ void ScaleStructureComponent::groupingSplit(int groupIndex, int sizeChangeAmount
 {
 	DBG("SSC: Group " + String(groupIndex) + " split with new size " + String(sizeChangeAmount));
 	scaleStructure.splitDegreeGroup(groupIndex, sizeChangeAmount);
+	ensureColourTablesSized();
 	listeners.call(&ScaleStructureComponent::Listener::scaleStructureChanged);
 }
 
@@ -318,6 +348,7 @@ void ScaleStructureComponent::groupingResized(int groupIndex, int sizeChangeAmou
 {
 	DBG("SSC: Group " + String(groupIndex) + " resized by " + String(sizeChangeAmount) +", " + (!draggedClockwise ? "counter" : "") + "clockwise");
 	scaleStructure.resizeDegreeGroup(groupIndex, sizeChangeAmount, draggedClockwise);
+	ensureColourTablesSized();
 	listeners.call(&ScaleStructureComponent::Listener::scaleStructureChanged);
 }
 
@@ -325,7 +356,101 @@ void ScaleStructureComponent::groupingsMerged(int groupIndex)
 {
 	DBG("SSC: Group " + String(groupIndex) + " merged with group " + String(groupIndex - 1));
 	scaleStructure.mergeDegreeGroups(groupIndex);
+	ensureColourTablesSized();
 	listeners.call(&ScaleStructureComponent::Listener::scaleStructureChanged);
+}
+
+void ScaleStructureComponent::groupColourChanged(int groupIndex, Colour newColour)
+{
+	scaleStructure.setGroupColour(groupIndex, newColour);
+	refreshColours();
+	listeners.call(&ScaleStructureComponent::Listener::scaleStructureChanged);
+}
+
+void ScaleStructureComponent::degreeColourChanged(int degreeIndex, Colour newColour)
+{
+	scaleStructure.setDegreeColour(degreeIndex, newColour);
+	refreshColours();
+	listeners.call(&ScaleStructureComponent::Listener::scaleStructureChanged);
+}
+
+void ScaleStructureComponent::refreshColours()
+{
+	if (circle != nullptr)
+		circle->repaint();
+}
+
+//==============================================================================
+// ScaleStructure::Listener - refresh the UI from the model (follower mode). These read the
+// model and set widgets without notifying, so they never write back to the model.
+
+void ScaleStructureComponent::scaleStructurePeriodChanged()
+{
+	loadScaleStructureSettings();
+}
+
+void ScaleStructureComponent::scaleStructureGeneratorChanged()
+{
+	generatorOffset = scaleStructure.getGeneratorOffset();
+	updateGenerators();
+	updateScaleSizes();
+	updatePGLabel();
+	updateLsLabel();
+	if (circle != nullptr)
+		circle->updateGenerator();
+}
+
+void ScaleStructureComponent::scaleStructureOffsetChanged()
+{
+	generatorOffset = scaleStructure.getGeneratorOffset();
+	updateOffsetLabel();
+	updateLsLabel();
+	if (circle != nullptr)
+		circle->updateGenerator();
+}
+
+void ScaleStructureComponent::scaleStructureSizeChanged()
+{
+	updateScaleSizes();
+	updateLsLabel();
+	if (circle != nullptr)
+		circle->updateGenerator();
+}
+
+void ScaleStructureComponent::scaleStructureGroupingChanged()
+{
+	ensureColourTablesSized();
+	if (circle != nullptr)
+		circle->updateGenerator();
+}
+
+void ScaleStructureComponent::scaleStructureAlterationsChanged()
+{
+	updateLsLabel();
+	if (circle != nullptr)
+		circle->updateGenerator();
+}
+
+Colour ScaleStructureComponent::defaultGroupColour(int groupIndex)
+{
+	// Distinct hues spaced by the golden ratio for good separation at any count.
+	return Colour::fromHSV(std::fmod(0.075f + groupIndex * 0.6180339887f, 1.0f), 0.55f, 0.92f, 1.0f);
+}
+
+void ScaleStructureComponent::ensureColourTablesSized()
+{
+	if (!ownsColourTables || !scaleStructure.isValid())
+		return;
+
+	// One colour per group; seed any newly-added group slots from the default palette.
+	const int numGroups = scaleStructure.getDegreeGroupings().size();
+	for (int i = ownedGroupColours.size(); i < numGroups; ++i)
+		ownedGroupColours.add(defaultGroupColour(i));
+
+	// One override slot per scale degree; new entries default to transparent ("no override").
+	const int period = scaleStructure.getPeriod();
+	if (ownedDegreeOverrides.size() != period)
+		ownedDegreeOverrides.resize(period);
 }
 
 void ScaleStructureComponent::loadScaleStructureSettings()
@@ -344,6 +469,8 @@ void ScaleStructureComponent::loadScaleStructureSettings()
 		updateScaleSizes();
 		updateLsLabel();
 		updateOffsetLabel();
+
+		ensureColourTablesSized();
 
 		circle->updatePeriod();
 		circle->updateGenerator();
@@ -406,6 +533,7 @@ void ScaleStructureComponent::onPeriodChange(bool sendNotification)
 	updateScaleSizes();
 	updatePGLabel();
 
+	ensureColourTablesSized();
 	circle->updatePeriod();
 
 	if (sendNotification)

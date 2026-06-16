@@ -1,42 +1,66 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(MosScaleCircleComponent VERSION 1.0.0 LANGUAGES CXX)
+project(MosScaleCircle VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# If JUCE hasn't been added by the parent project, add it here
+# ------------------------------------------------------------------------------
+# JUCE
+#
+# When this repo is consumed by a parent project, JUCE has usually already been
+# added (juce::juce_core exists) and we just register our module. For standalone
+# builds, point JUCE_PATH (or the juce_DIR env var) at a JUCE checkout.
+# ------------------------------------------------------------------------------
 if(NOT TARGET juce::juce_core)
-    set(JUCE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../juce-framework/JUCE" CACHE PATH "Path to JUCE framework")
-    add_subdirectory(${JUCE_PATH} ${CMAKE_CURRENT_BINARY_DIR}/JUCE)
+    set(JUCE_PATH "$ENV{juce_DIR}" CACHE PATH "Path to a JUCE checkout")
+    if(NOT JUCE_PATH OR NOT EXISTS "${JUCE_PATH}/CMakeLists.txt")
+        foreach(candidate
+                "${CMAKE_CURRENT_SOURCE_DIR}/../juce"
+                "${CMAKE_CURRENT_SOURCE_DIR}/../JUCE"
+                "$ENV{HOME}/Programming/juce")
+            if(EXISTS "${candidate}/CMakeLists.txt")
+                set(JUCE_PATH "${candidate}")
+                break()
+            endif()
+        endforeach()
+    endif()
+    if(NOT EXISTS "${JUCE_PATH}/CMakeLists.txt")
+        message(FATAL_ERROR "Could not locate JUCE. Set -DJUCE_PATH=/path/to/JUCE.")
+    endif()
+    add_subdirectory("${JUCE_PATH}" "${CMAKE_CURRENT_BINARY_DIR}/JUCE")
 endif()
 
-add_library(MosScaleCircleComponent STATIC
-    Source/ScaleStructure.cpp
-    Source/ScaleStructureComponent.cpp
-    Source/GroupingCircle.cpp
-    Source/GroupHandle.cpp
-    Source/NumberSelector.cpp
-    Source/NoteNames.cpp
-)
+# ------------------------------------------------------------------------------
+# The reusable module. Consumers link the `mos_scale_circle` target; its JUCE
+# dependencies (declared in mos_scale_circle.h) propagate transitively.
+# ------------------------------------------------------------------------------
+juce_add_module("${CMAKE_CURRENT_SOURCE_DIR}/mos_scale_circle" ALIAS_NAMESPACE mos)
 
-target_include_directories(MosScaleCircleComponent
-    PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/Source>
-        $<INSTALL_INTERFACE:include>
-)
+# ------------------------------------------------------------------------------
+# Optional demo / verification app.
+# ------------------------------------------------------------------------------
+option(MOSSC_BUILD_DEMO "Build the MOS Scale Circle demo app" OFF)
 
-target_compile_definitions(MosScaleCircleComponent
-    PUBLIC
+if(MOSSC_BUILD_DEMO)
+    juce_add_gui_app(MosScaleCircleDemo
+        PRODUCT_NAME "MOS Scale Circle Demo"
+        NEEDS_WEB_BROWSER FALSE
+        NEEDS_CURL FALSE)
+
+    target_sources(MosScaleCircleDemo PRIVATE
+        examples/Main.cpp
+        examples/DemoComponent.cpp)
+
+    target_compile_definitions(MosScaleCircleDemo PRIVATE
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
-)
+        JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:MosScaleCircleDemo,JUCE_PRODUCT_NAME>"
+        JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:MosScaleCircleDemo,JUCE_VERSION>")
 
-target_link_libraries(MosScaleCircleComponent
-    PUBLIC
-        juce::juce_core
-        juce::juce_data_structures
-        juce::juce_events
-        juce::juce_graphics
-        juce::juce_gui_basics
+    target_link_libraries(MosScaleCircleDemo PRIVATE
+        mos_scale_circle
         juce::juce_gui_extra
-)
+        juce::juce_recommended_config_flags
+        juce::juce_recommended_warning_flags)
+endif()

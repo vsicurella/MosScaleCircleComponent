@@ -10,7 +10,6 @@
 
 #pragma once
 
-#include <JuceHeader.h>
 #include "ScaleStructure.h"
 #include "GroupHandle.h"
 #include "NoteNames.h"
@@ -18,11 +17,19 @@
 //==============================================================================
 /*
 */
-class GroupingCircle    : public Component
+class GroupingCircle    : public Component,
+                          public TooltipClient
 {
 public:
-    GroupingCircle(const ScaleStructure& structureIn, Array<Colour>& colourTableIn);
+    GroupingCircle(const ScaleStructure& structureIn);
     ~GroupingCircle();
+
+	// Host-supplied launcher used to assign a colour to a group or degree. The component passes
+	// the target section's bounds (in this component's coordinates) and its current colour; the
+	// host shows its own picker and invokes onPicked(chosen) when the user commits. When this is
+	// left unset, a built-in juce::ColourSelector is shown in a CallOutBox instead.
+	using ColourPickerLauncher = std::function<void (Rectangle<int> area, Colour current, std::function<void (Colour)> onPicked)>;
+	void setColourPickerLauncher(ColourPickerLauncher launcherIn);
 
 	float getInnerRadius() const;
 	float getMiddleRadius() const;
@@ -53,20 +60,28 @@ public:
 	void mouseDrag(const MouseEvent& event) override;
 	void mouseUp(const MouseEvent& event) override;
 
+	// TooltipClient - hints that the rings can be dragged / right-clicked.
+	String getTooltip() override;
+
 
 	class Listener
 	{
 	public:
-		~Listener() {};
+		virtual ~Listener() {}
 
 		virtual void offsetChanged(int newOffset) = 0;
-		
+
 		virtual void degreeIndexAltered(int degreeIndex, Point<int> alteration) = 0;
 		virtual void allModificationsReset() = 0;
 
 		virtual void groupingSplit(int groupIndex, int sizeChangeAmount) = 0;
 		virtual void groupingResized(int groupIndex, int sizeChangeAmount, bool draggedClockwise) = 0;
 		virtual void groupingsMerged(int groupIndex) = 0;
+
+		// Called when the user assigns a colour to a degree group (or a single degree) from the wheel.
+		// Pass a transparent colour to clear a per-degree override.
+		virtual void groupColourChanged(int groupIndex, Colour newColour) {}
+		virtual void degreeColourChanged(int degreeIndex, Colour newColour) {}
 	};
 
 	void addListener(Listener* listenerToAdd);
@@ -86,9 +101,6 @@ private:
 
 	const ScaleStructure& scaleStructure;
 
-	// Starting from the first degree of the primary degree grouping going clockwise
-	const Array<Colour>& colourTable;
-
 	// The groups of scale degree arrays
 	Array<Array<int>> degreeGroupings;
 
@@ -100,6 +112,17 @@ private:
 
 	PopupMenu groupMenu;
 	PopupMenu degreeMenu;
+
+	// Colour assignment: which group/degree a launched colour picker should write to (-1 if none).
+	int colourTargetGroup = -1;
+	int colourTargetDegree = -1;
+	ColourPickerLauncher colourPickerLauncher;
+
+	// Launches the host picker (or the built-in juce::ColourSelector fallback) to assign a colour
+	// to a group or a single degree; the chosen colour is delivered via the listener callbacks.
+	void openColourPickerForGroup(int groupIndex);
+	void openColourPickerForDegree(int degreeIndex);
+	void launchColourPicker();
 
 	NoteNames* noteNames = nullptr;
 	bool showNoteNameLabels = false;
@@ -123,7 +146,7 @@ private:
 	Array<int> highlightedDegreeEdges; // TODO: turn this into Array<Point<int>> to differentiate symmetric edges
 	Array<Line<float>> highlightedEdgeLines;
 		
-	const float handleDotAngRatio = float_Pi / 100.0f;
+	const float handleDotAngRatio = MathConstants<float>::pi / 100.0f;
 	float handleDotRadius;
 	float handleHighlightMult = 1.5f;
 	float handlePlacementRadius;
@@ -150,7 +173,7 @@ private:
 	float degreeMiddleRadius;
 
 	Point<float> center;
-	float circleOffset = float_Pi / 2.0f;
+	float circleOffset = MathConstants<float>::pi / 2.0f;
 
 	float groupRingWidth;
 	float degreeRingWidth;
@@ -161,8 +184,8 @@ private:
 
 	double angleIncrement;
 	double angleHalf;
-	const float float_HalfPi = float_Pi / 2;
-	const float float_Tau = float_Pi * 2;
+	const float float_HalfPi = MathConstants<float>::pi / 2;
+	const float float_Tau = MathConstants<float>::pi * 2;
 
 	Array<Line<float>> radiLines;
 	Array<Path> degreeArcPaths;

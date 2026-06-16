@@ -16,6 +16,8 @@ ScaleStructure::ScaleStructure()
 	period = 0;
 	generatorIndex = -1;
 	sizeIndexSelected = -1;
+	initState();
+	syncStateFromMembers();
 }
 
 ScaleStructure::ScaleStructure(
@@ -27,6 +29,7 @@ ScaleStructure::ScaleStructure(
 	Array<int> degreeGroupsIn,
 	Array<Point<int>> chromaAlterationsIn)
 {
+	initState();
 	setAll(periodIn, genIndexIn, sizeIndexIn, genOffsetIn, periodFactorIndexIn, degreeGroupsIn, chromaAlterationsIn);
 }
 
@@ -44,6 +47,9 @@ void ScaleStructure::setAll(
 	Array<int> degreeGroupSizeIndiciesIn,
 	Array<Point<int>> chromaAlterationsIn)
 {
+	const int oldPeriod = period;
+	const int oldGenerator = generatorIndex;
+
 	bool fPeriodChanged = false;
 
 	if (period != periodIn)
@@ -102,6 +108,14 @@ void ScaleStructure::setAll(
 	{
 		useSuggestedSizeGrouping();
 	}
+
+	// Mirror the resulting state into the tree and broadcast the most relevant change.
+	syncStateFromMembers();
+	if (period != oldPeriod)
+		structureListeners.call(&Listener::scaleStructurePeriodChanged);
+	else if (generatorIndex != oldGenerator)
+		structureListeners.call(&Listener::scaleStructureGeneratorChanged);
+	structureListeners.call(&Listener::scaleStructureChanged);
 }
 
 bool ScaleStructure::isValid() const
@@ -471,6 +485,8 @@ void ScaleStructure::setAlterationOfDegree(int degreeIndexIn, Point<int> alterat
 		}
 
 		fillSymmetricGrouping();
+		syncStateFromMembers();
+		notifyChange(ScaleStructureIDs::chromaAlterations);
 	}
 }
 
@@ -508,6 +524,8 @@ void ScaleStructure::resetAlterationOfDegree(int degreeIndexIn)
 		chromaAlterations.set(index, Point<int>(-1, 0));
 
 		fillSymmetricGrouping();
+		syncStateFromMembers();
+		notifyChange(ScaleStructureIDs::chromaAlterations);
 	}
 }
 
@@ -523,6 +541,9 @@ void ScaleStructure::setPeriodFactorIndex(int index)
 		calculateProperties();
 		calculateGeneratorChain();
 	}
+
+	syncStateFromMembers();
+	notifyChange(ScaleStructureIDs::periodFactorIndex);
 }
 
 void ScaleStructure::setSizeIndex(int index)
@@ -534,12 +555,18 @@ void ScaleStructure::setSizeIndex(int index)
 		setGeneratorOffset(getScaleSize() - 1);
 	else
 		useSuggestedSizeGrouping();
+
+	syncStateFromMembers();
+	notifyChange(ScaleStructureIDs::sizeIndex);
 }
 
 void ScaleStructure::setGeneratorOffset(int offsetIn)
 {
 	generatorOffset = offsetIn;
 	fillSymmetricGrouping();
+
+	syncStateFromMembers();
+	notifyChange(ScaleStructureIDs::generatorOffset);
 }
 
 void ScaleStructure::setRetainGroupingSymmetry(bool isSymmetric)
@@ -565,6 +592,8 @@ bool ScaleStructure::setChromaAlterations(Array<Point<int>> chromaAlterationsIn)
 	{
 		chromaAlterations = chromaAlterationsIn;
 		fillSymmetricGrouping(); // TODO: handle non-symmetric cases
+		syncStateFromMembers();
+		notifyChange(ScaleStructureIDs::chromaAlterations);
 		return true;
 	}
 
@@ -1174,6 +1203,8 @@ void ScaleStructure::setDegreeGrouping(Array<int> groupingSizeIndiciesIn)
 		else
 			return; // TODO: bring back other degree grouping function
 
+		syncStateFromMembers();
+		notifyChange(ScaleStructureIDs::degreeGroups);
 		return;
 	}
 
@@ -1790,4 +1821,248 @@ String ScaleStructure::getLsSteps()
 		steps = steps.replaceFirstOccurrenceOf(s, "s");
 
 	return steps;
+}
+
+//==============================================================================
+// Colour API
+
+void ScaleStructure::setColourMode(ColourMode modeIn)
+{
+	colourMode = modeIn;
+}
+
+ScaleStructure::ColourMode ScaleStructure::getColourMode() const
+{
+	return colourMode;
+}
+
+void ScaleStructure::setGroupColourTable(Array<Colour>& tableIn)
+{
+	groupColours = &tableIn;
+}
+
+void ScaleStructure::setDegreeOverrideTable(Array<Colour>& tableIn)
+{
+	degreeColourOverrides = &tableIn;
+}
+
+Colour ScaleStructure::getDegreeColour(int scaleDegreeIn) const
+{
+	// In ByDegree an opaque per-degree override wins; otherwise (and always in ByGroup)
+	// follow the degree's current group.
+	if (colourMode == ColourMode::ByDegree
+		&& degreeColourOverrides != nullptr
+		&& scaleDegreeIn >= 0 && scaleDegreeIn < degreeColourOverrides->size())
+	{
+		Colour deg = degreeColourOverrides->getReference(scaleDegreeIn);
+		if (!deg.isTransparent())
+			return deg;
+	}
+
+	return getGroupColour(getGroupOfDegree(scaleDegreeIn));
+}
+
+Colour ScaleStructure::getGroupColour(int groupIndexIn) const
+{
+	if (groupColours == nullptr || groupIndexIn < 0 || groupIndexIn >= groupColours->size())
+		return Colour();
+
+	return groupColours->getReference(groupIndexIn);
+}
+
+bool ScaleStructure::hasDegreeColourOverride(int scaleDegreeIn) const
+{
+	return colourMode == ColourMode::ByDegree
+		&& degreeColourOverrides != nullptr
+		&& scaleDegreeIn >= 0
+		&& scaleDegreeIn < degreeColourOverrides->size()
+		&& !degreeColourOverrides->getReference(scaleDegreeIn).isTransparent();
+}
+
+void ScaleStructure::setDegreeColour(int scaleDegreeIn, Colour colourIn)
+{
+	if (scaleDegreeIn < 0)
+		return;
+
+	// ByGroup has no per-degree overrides; recolour the degree's whole group instead.
+	if (colourMode == ColourMode::ByGroup)
+	{
+		setGroupColour(getGroupOfDegree(scaleDegreeIn), colourIn);
+		return;
+	}
+
+	if (degreeColourOverrides == nullptr)
+		return;
+
+	if (scaleDegreeIn >= degreeColourOverrides->size())
+		degreeColourOverrides->resize(scaleDegreeIn + 1);
+
+	degreeColourOverrides->set(scaleDegreeIn, colourIn);
+}
+
+void ScaleStructure::setGroupColour(int groupIndexIn, Colour colourIn)
+{
+	if (groupColours == nullptr || groupIndexIn < 0)
+		return;
+
+	if (groupIndexIn >= groupColours->size())
+		groupColours->resize(groupIndexIn + 1);
+
+	groupColours->set(groupIndexIn, colourIn);
+}
+
+//==============================================================================
+// Master / follower parameter sync
+
+namespace
+{
+	String intArrayToStr(const Array<int>& a)
+	{
+		StringArray s;
+		for (int v : a)
+			s.add(String(v));
+		return s.joinIntoString(",");
+	}
+
+	Array<int> strToIntArray(const String& str)
+	{
+		Array<int> out;
+		if (str.isNotEmpty())
+			for (auto& tok : StringArray::fromTokens(str, ",", ""))
+				out.add(tok.getIntValue());
+		return out;
+	}
+
+	String pointArrayToStr(const Array<Point<int>>& a)
+	{
+		StringArray s;
+		for (auto& p : a)
+			s.add(String(p.x) + ":" + String(p.y));
+		return s.joinIntoString(",");
+	}
+
+	Array<Point<int>> strToPointArray(const String& str)
+	{
+		Array<Point<int>> out;
+		if (str.isNotEmpty())
+			for (auto& tok : StringArray::fromTokens(str, ",", ""))
+			{
+				auto xy = StringArray::fromTokens(tok, ":", "");
+				if (xy.size() == 2)
+					out.add(Point<int>(xy[0].getIntValue(), xy[1].getIntValue()));
+			}
+		return out;
+	}
+}
+
+ScaleStructure::ScaleStructure(ValueTree stateIn)
+{
+	state = stateIn.hasType(ScaleStructureIDs::MosScaleStructure)
+		? stateIn
+		: ValueTree(ScaleStructureIDs::MosScaleStructure);
+
+	// Read primary params (with sensible defaults) before listening, then build the model.
+	const int p         = state.getProperty(ScaleStructureIDs::period, 12);
+	const int genIdx    = state.getProperty(ScaleStructureIDs::generatorIndex, -1);
+	const int sizeIdx   = state.getProperty(ScaleStructureIDs::sizeIndex, -1);
+	const int offset    = state.getProperty(ScaleStructureIDs::generatorOffset, 0);
+	const int factorIdx = state.getProperty(ScaleStructureIDs::periodFactorIndex, 0);
+	const Array<int> groups            = strToIntArray(state.getProperty(ScaleStructureIDs::degreeGroups, ""));
+	const Array<Point<int>> alterations = strToPointArray(state.getProperty(ScaleStructureIDs::chromaAlterations, ""));
+
+	state.addListener(this);
+	setAll(p, genIdx, sizeIdx, offset, factorIdx, groups, alterations);
+}
+
+ScaleStructure::~ScaleStructure()
+{
+	// The state tree may be owned externally and outlive us; detach so it never calls back
+	// into a destroyed object.
+	state.removeListener(this);
+}
+
+void ScaleStructure::initState()
+{
+	state = ValueTree(ScaleStructureIDs::MosScaleStructure);
+	state.addListener(this);
+}
+
+void ScaleStructure::syncStateFromMembers()
+{
+	if (!state.isValid())
+		return;
+
+	// Guard so these writes are not mistaken for external edits.
+	const ScopedValueSetter<bool> guard(inhibitStateCallback, true);
+
+	state.setProperty(ScaleStructureIDs::period, period, nullptr);
+	state.setProperty(ScaleStructureIDs::generatorIndex, generatorIndex, nullptr);
+	state.setProperty(ScaleStructureIDs::sizeIndex, sizeIndexSelected, nullptr);
+	state.setProperty(ScaleStructureIDs::generatorOffset, generatorOffset, nullptr);
+	state.setProperty(ScaleStructureIDs::periodFactorIndex, periodFactorIndexSelected, nullptr);
+	state.setProperty(ScaleStructureIDs::degreeGroups, intArrayToStr(getGroupingIndexedSizes()), nullptr);
+	state.setProperty(ScaleStructureIDs::chromaAlterations, pointArrayToStr(getChromaAlterations()), nullptr);
+}
+
+void ScaleStructure::notifyChange(const Identifier& whichParam)
+{
+	if (whichParam == ScaleStructureIDs::period)
+		structureListeners.call(&Listener::scaleStructurePeriodChanged);
+	else if (whichParam == ScaleStructureIDs::generatorIndex)
+		structureListeners.call(&Listener::scaleStructureGeneratorChanged);
+	else if (whichParam == ScaleStructureIDs::generatorOffset)
+		structureListeners.call(&Listener::scaleStructureOffsetChanged);
+	else if (whichParam == ScaleStructureIDs::sizeIndex)
+		structureListeners.call(&Listener::scaleStructureSizeChanged);
+	else if (whichParam == ScaleStructureIDs::degreeGroups)
+		structureListeners.call(&Listener::scaleStructureGroupingChanged);
+	else if (whichParam == ScaleStructureIDs::chromaAlterations)
+		structureListeners.call(&Listener::scaleStructureAlterationsChanged);
+	// periodFactorIndex has no dedicated granular callback - catch-all only.
+
+	structureListeners.call(&Listener::scaleStructureChanged);
+}
+
+void ScaleStructure::applyStateProperty(const Identifier& p)
+{
+	// An external controller wrote a primary parameter; route it through the matching
+	// setter so member state + derived data + the tree all stay consistent.
+	if (p == ScaleStructureIDs::period)
+		setAll((int)state[p], -1, -1, generatorOffset, periodFactorIndexSelected);
+	else if (p == ScaleStructureIDs::generatorIndex)
+		setAll(period, (int)state[p], -1, generatorOffset, periodFactorIndexSelected);
+	else if (p == ScaleStructureIDs::periodFactorIndex)
+		setAll(period, -1, -1, generatorOffset, (int)state[p]);
+	else if (p == ScaleStructureIDs::sizeIndex)
+		setSizeIndex((int)state[p]);
+	else if (p == ScaleStructureIDs::generatorOffset)
+		setGeneratorOffset((int)state[p]);
+	else if (p == ScaleStructureIDs::degreeGroups)
+		setDegreeGrouping(strToIntArray(state[p].toString()));
+	else if (p == ScaleStructureIDs::chromaAlterations)
+		setChromaAlterations(strToPointArray(state[p].toString()));
+}
+
+void ScaleStructure::valueTreePropertyChanged(ValueTree& tree, const Identifier& property)
+{
+	// Ignore our own member->tree sync; only react to genuine external edits.
+	if (inhibitStateCallback || tree != state)
+		return;
+
+	applyStateProperty(property);
+}
+
+ValueTree ScaleStructure::getState() const
+{
+	return state;
+}
+
+void ScaleStructure::addListener(Listener* listenerToAdd)
+{
+	structureListeners.add(listenerToAdd);
+}
+
+void ScaleStructure::removeListener(Listener* listenerToRemove)
+{
+	structureListeners.remove(listenerToRemove);
 }

@@ -9,7 +9,6 @@
 */
 
 #pragma once
-#include <JuceHeader.h>
 
 const double PI = 3.14159265359f;
 
@@ -134,7 +133,7 @@ static Array<int> getContinuedFraction(double num, int maxDepth=20, double round
 }
 
 template <class T>
-static String arrayToString(Array<T>& arrayIn, String name = "", char arrayStart=0, char arrayEnd=0)
+static String arrayToString(const Array<T>& arrayIn, String name = "", char arrayStart=0, char arrayEnd=0)
 {
 	String strOut;
 

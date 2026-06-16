@@ -9,13 +9,27 @@
 */
 
 #pragma once
-#include <JuceHeader.h>
 #include "Common.h"
 #include "Symmetry.h"
+#include "ScaleStructureIDs.h"
 
-class ScaleStructure
+class ScaleStructure : private ValueTree::Listener
 {
-	int period;
+public:
+	/*
+		Selects how a scale degree's colour is resolved (see getDegreeColour):
+		  ByGroup  - every degree takes the colour of the group it belongs to.
+		  ByDegree - a degree takes its per-degree override if one is set (opaque),
+		             otherwise the colour of the group it currently belongs to.
+	*/
+	enum class ColourMode { ByGroup, ByDegree };
+
+	// Forward-declared so the listener-list member below resolves to this nested type rather
+	// than the privately-inherited juce::ValueTree::Listener. Defined in full further down.
+	class Listener;
+
+private:
+	int period = 0;
 	int generatorIndex = -1;
 	int periodFactorIndexSelected = 0;
 	int sizeIndexSelected = -1;
@@ -84,10 +98,37 @@ class ScaleStructure
 	// lends well particularly for notation and theory.
 	bool retainMOSGroupSizes = true;
 
+	// Colour tables owned externally (e.g. by the hosting component). They must outlive this
+	// ScaleStructure (held by pointer). groupColours holds one colour per degree group;
+	// degreeColourOverrides holds an optional per-degree override (a transparent entry means
+	// "no override - follow the group"). Null until the corresponding setter is called.
+	Array<Colour>* groupColours = nullptr;
+	Array<Colour>* degreeColourOverrides = nullptr;
+
+	// How getDegreeColour resolves a degree's colour. Defaults to ByDegree (the latest
+	// direction); the legacy Array<Colour>& component/circle constructors switch to ByGroup.
+	ColourMode colourMode = ColourMode::ByDegree;
+
+	// Shared source-of-truth tree mirroring the primary parameters (see getState()).
+	ValueTree state;
+	ListenerList<Listener> structureListeners;
+
+	// Guards the internal members -> tree sync so it isn't mistaken for an external edit.
+	bool inhibitStateCallback = false;
+
 private:
 	/*
 		Private methods
 	*/
+
+	// Master/follower helpers.
+	void initState();                                       // create tree + attach listener
+	void syncStateFromMembers();                            // write members -> tree (guarded)
+	void notifyChange(const Identifier& whichParam);        // broadcast granular + catch-all
+	void applyStateProperty(const Identifier& whichParam);  // external tree edit -> model
+
+	// ValueTree::Listener
+	void valueTreePropertyChanged(ValueTree& tree, const Identifier& property) override;
 
 	// Calculates the properties related to the Period & Generator combo
 	void calculateProperties();
@@ -120,6 +161,7 @@ public:
 	);
 	ScaleStructure(const ScaleStructure& scaleToCopy);
 	ScaleStructure(ValueTree scaleStructureProperties);
+	~ScaleStructure();
 
 	/*
 		Set the period and use suggested and default values for everything else
@@ -215,6 +257,43 @@ public:
 		Returns the index of the group the group chain index falls in
 	*/
 	int getGroupOfDegreeIndex(int groupChainIndex) const;
+
+	//==============================================================================
+	// Colour API. The colour tables are owned by the caller (e.g. the hosting component)
+	// and supplied via the setters below; they must outlive this ScaleStructure.
+
+	void setColourMode(ColourMode modeIn);
+	ColourMode getColourMode() const;
+
+	void setGroupColourTable(Array<Colour>& tableIn);
+	void setDegreeOverrideTable(Array<Colour>& tableIn);
+
+	/*
+		Returns the resolved colour of a scale degree: in ByDegree, its per-degree override if
+		one is set (opaque), otherwise its current group's colour; in ByGroup, always its group's.
+	*/
+	Colour getDegreeColour(int scaleDegreeIn) const;
+
+	/*
+		Returns the base colour of a degree group (transparent if unassigned / out of range).
+	*/
+	Colour getGroupColour(int groupIndexIn) const;
+
+	/*
+		Returns true only in ByDegree mode when the scale degree has an opaque per-degree override.
+	*/
+	bool hasDegreeColourOverride(int scaleDegreeIn) const;
+
+	/*
+		In ByDegree, sets a per-degree override (pass a transparent colour to clear it so the degree
+		follows its group again). In ByGroup, recolours the degree's whole group.
+	*/
+	void setDegreeColour(int scaleDegreeIn, Colour colourIn);
+
+	/*
+		Sets the base colour of a degree group (both modes). Auto-grows the table if needed.
+	*/
+	void setGroupColour(int groupIndexIn, Colour colourIn);
 
 	/*
 		Finds the generator chain indices a given degree can be altered to
@@ -347,4 +426,38 @@ public:
 
 	// Returns the scale as a string of L and s step sizes
 	String getLsSteps();
+
+	//==============================================================================
+	// Master / follower parameter sync.
+	//
+	// The primary (input) parameters are mirrored into a ValueTree that acts as the shared
+	// source of truth. As a MASTER, edits made through this control update the tree and notify
+	// subscribers (granular callbacks + a catch-all, and/or the tree's own ValueTree::Listener).
+	// As a FOLLOWER, an external controller writes properties into the tree (or constructs this
+	// ScaleStructure from its own tree) and the model updates to match. ValueTree de-duplication
+	// means a no-op write notifies nobody, so there is no feedback loop.
+
+	// The backing state tree (type ScaleStructureIDs::MosScaleStructure). Attach a
+	// ValueTree::Listener to it, persist it, or wire an UndoManager, as needed.
+	ValueTree getState() const;
+
+	class Listener
+	{
+	public:
+		virtual ~Listener() {}
+
+		// Granular notifications - exactly one fires for the parameter that changed.
+		virtual void scaleStructurePeriodChanged() {}
+		virtual void scaleStructureGeneratorChanged() {}
+		virtual void scaleStructureOffsetChanged() {}
+		virtual void scaleStructureSizeChanged() {}
+		virtual void scaleStructureGroupingChanged() {}
+		virtual void scaleStructureAlterationsChanged() {}
+
+		// Catch-all - fires after any of the above.
+		virtual void scaleStructureChanged() {}
+	};
+
+	void addListener(Listener* listenerToAdd);
+	void removeListener(Listener* listenerToRemove);
 };
