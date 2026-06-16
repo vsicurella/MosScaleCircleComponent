@@ -89,6 +89,12 @@ void GroupingCircle::updatePeriod()
 		l->setInterceptsMouseClicks(false, false);
 		l->setColour(TextEditor::ColourIds::backgroundColourId, Colour());
 		l->setColour(TextEditor::ColourIds::outlineColourId, Colour());
+		// Zero the default indents/border: at small window sizes JUCE's fixed ~4px
+		// text indents dominate the tiny label box and clip multi-digit degree
+		// numbers. With no indents the box width == the text width and the font
+		// shrink-to-fit in resized() keeps even two-digit numbers fully visible.
+		l->setBorder(BorderSize<int>(0));
+		l->setIndents(0, 0);
 		addAndMakeVisible(l);
 	}
 
@@ -365,7 +371,31 @@ void GroupingCircle::resized()
 	float degreeLabelSize = jmin(degreeRingWidth, float_Tau * degreeMiddleRadius / degreeLabels.size()) * sectorLabelSizeRatio;
 	float groupLabelSize = groupRingWidth * sectorLabelSizeRatio;
 
-	float angle, angleTo, groupAngleFrom = -circleOffset; 
+	// A degree label must fit inside one sector's tangential width, otherwise multi-digit numbers
+	// (or note names) spill into the neighbouring sectors. Measure the widest label at the current
+	// height and shrink the (uniform) label height so even the widest one fits.
+	float maxLabelWidth = (float)(float_Tau * degreeMiddleRadius / degreeLabels.size()) * sectorLabelSizeRatio;
+	if (degreeLabels.size() > 0 && maxLabelWidth > 0.0f)
+	{
+		float widestText = 0.0f;
+		for (int i = 0; i < degreeLabels.size() && i < groupChain.size(); i++)
+		{
+			Font measureFont = (showNoteNameLabels && noteNames)
+				? noteNames->getNoteNameFont().withHeight(degreeLabelSize)
+				: Font().withHeight(degreeLabelSize);
+
+			String text = (showNoteNameLabels && noteNames)
+				? noteNames->getChainIndexName(i)
+				: String(groupChain[i]);
+
+			widestText = jmax(widestText, measureFont.getStringWidthFloat(text));
+		}
+
+		if (widestText > maxLabelWidth)
+			degreeLabelSize *= maxLabelWidth / widestText;
+	}
+
+	float angle, angleTo, groupAngleFrom = -circleOffset;
 	float degLabelAngle, groupLabelAngle;
 
 	Path degreePath, groupPath;
@@ -651,16 +681,18 @@ void GroupingCircle::mouseMove(const MouseEvent& event)
 		}
 	}
 
+	// Show a resize cursor to hint that the degree ring (drag to change the offset) and the
+	// group-resize / new-group handles can be click-dragged.
+	const bool overDegreeRing = (mouseRadius >= degreeInnerRadius && mouseRadius < degreeOuterRadius);
+	setMouseCursor((overDegreeRing || handleMouseOver > -1) ? MouseCursor::LeftRightResizeCursor
+	                                                        : MouseCursor::NormalCursor);
+
 	// TODO: implement ring sectors as components so only certain ones need to be repainted
 	if (dirty)
 	{
 		// Reveal the hovered group's number label when that option is enabled.
 		if (highlightShowsGroupNumber)
 			refreshGroupLabelVisibility();
-
-		// Show a resize cursor while hovering a group-resize / new-group handle.
-		setMouseCursor(handleMouseOver > -1 ? MouseCursor::LeftRightResizeCursor
-		                                    : MouseCursor::NormalCursor);
 
 		repaint();
 	}
@@ -1211,9 +1243,16 @@ String GroupingCircle::getTooltip()
 
 		return "Drag to resize this group and its neighbour";
 	}
+
+	const float radius = getMouseXYRelative().toFloat().getDistanceFrom(center);
+
+	if (radius >= degreeInnerRadius && radius < degreeOuterRadius)
+		return "Drag to change the scale offset; right-click to assign a colour";
+
+	if (showGroups && radius >= degreeOuterRadius && radius < groupOuterRadius)
+		return "Right-click to assign a group colour";
+
 	return String();
-	// return "Drag the degree ring to change the offset, drag a group edge to resize, "
-	//        "or right-click to assign colours.";
 }
 
 void GroupingCircle::degreeToModSelectedCallback(int degreeIndex)
