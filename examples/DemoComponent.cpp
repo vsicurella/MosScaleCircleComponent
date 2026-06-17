@@ -54,6 +54,18 @@ DemoComponent::DemoComponent()
     showResizeToggle.onClick        = [this]() { editor->setShowGroupResizeControls  (showResizeToggle.getToggleState()); };
     showGroupsToggle.onClick        = [this]() { editor->setShowGroups               (showGroupsToggle.getToggleState()); };
 
+    // Scale option toggles — initial states match ScaleStructure defaults.
+    attachModsToDegreeToggle.setToggleState(scale.isAlterationsAttachedToDegree(), juce::dontSendNotification);
+    maintainSymmetryToggle.setToggleState  (scale.isRetainingSymmetry(),           juce::dontSendNotification);
+    lockToMosSizesToggle.setToggleState    (scale.isRetainingMOSSizes(),           juce::dontSendNotification);
+
+    for (auto* t : { &attachModsToDegreeToggle, &maintainSymmetryToggle, &lockToMosSizesToggle })
+        addAndMakeVisible(t);
+
+    attachModsToDegreeToggle.onClick = [this]() { scale.attachAlterationsToDegree    (attachModsToDegreeToggle.getToggleState()); editor->loadScaleStructureSettings(); };
+    maintainSymmetryToggle.onClick   = [this]() { scale.setRetainGroupingSymmetry    (maintainSymmetryToggle.getToggleState()); };
+    lockToMosSizesToggle.onClick     = [this]() { scale.setRetainMOSSizes            (lockToMosSizesToggle.getToggleState()); };
+
     setSize(900, 720);
 }
 
@@ -82,6 +94,13 @@ void DemoComponent::resized()
     column.removeFromTop(10);
     for (auto* t : { &alwaysGroupNumsToggle, &highlightToggle, &highlightGroupNumToggle,
                      &showParamsToggle, &showResizeToggle, &showGroupsToggle })
+    {
+        t->setBounds(column.removeFromTop(26));
+        column.removeFromTop(4);
+    }
+
+    column.removeFromTop(10);
+    for (auto* t : { &attachModsToDegreeToggle, &maintainSymmetryToggle, &lockToMosSizesToggle })
     {
         t->setBounds(column.removeFromTop(26));
         column.removeFromTop(4);

@@ -290,6 +290,11 @@ int ScaleStructure::getGroupOfDegreeIndex(int groupChainIndex) const
 	return degreeGroupChainMap[groupChainIndex];
 }
 
+bool ScaleStructure::isAlterationsAttachedToDegree() const
+{
+	return alterationsAttachedToDegree;
+}
+
 bool ScaleStructure::isRetainingSymmetry() const
 {
 	return retainGroupingSymmetry;

@@ -225,6 +225,8 @@ public:
 	Array<int> getGeneratorChain() const;
 	Array<int> getGroupChain() const;
 
+	bool isAlterationsAttachedToDegree() const;
+
 	bool isRetainingSymmetry() const;
 
 	bool isRetainingMOSSizes() const;

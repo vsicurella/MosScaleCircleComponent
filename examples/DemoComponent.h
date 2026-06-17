@@ -39,5 +39,9 @@ private:
     juce::ToggleButton showResizeToggle       { "Show group resize controls" };
     juce::ToggleButton showGroupsToggle       { "Show groups" };
 
+    juce::ToggleButton attachModsToDegreeToggle  { "Attach modifications to scale degrees" };
+    juce::ToggleButton maintainSymmetryToggle    { "Maintain grouping symmetry" };
+    juce::ToggleButton lockToMosSizesToggle      { "Lock to MOS sizes" };
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DemoComponent)
 };
