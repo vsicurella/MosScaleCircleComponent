@@ -2,15 +2,12 @@
     "version": "0.2.0",
     "configurations": [
         {
-            // Builds the demo, then launches the CMake "launch target" under the debugger.
-            // Select MosScaleCircleDemo as the launch target in the status bar first.
-            "name": "Debug MosScaleCircleDemo",
-            "type": "cppdbg",
+            "name": "Debug Demo (MSVC)",
+            "type": "cppvsdbg",
             "request": "launch",
             "program": "${command:cmake.launchTargetPath}",
             "args": [],
             "cwd": "${workspaceFolder}",
-            "MIMode": "lldb",
             "externalConsole": false,
             "preLaunchTask": "CMake: build demo"
         }
