@@ -88,6 +88,11 @@ public:
 	// Repaints the grouping circle after the colour scheme was edited externally.
 	void refreshColours();
 
+	// Forwards a host-supplied colour-picker launcher to the underlying grouping circle, so the
+	// host can replace the built-in juce::ColourSelector with its own picker. See
+	// GroupingCircle::setColourPickerLauncher (the launcher receives screen-space bounds).
+	void setColourPickerLauncher(GroupingCircle::ColourPickerLauncher launcherIn);
+
 	// Display toggles. setShowParameters hides this component's slider/dropdown/label controls
 	// (leaving just the wheel); the rest forward to the grouping circle.
 	void setShowParameters(bool shouldShow);

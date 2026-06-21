@@ -11,6 +11,8 @@
 
 #include "ScaleStructure.h"
 
+using namespace mosc; // numeric/utility helpers (PI, modulo, getCoprimes, PointPair, ...)
+
 ScaleStructure::ScaleStructure()
 {
 	period = 0;

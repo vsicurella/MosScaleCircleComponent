@@ -24,6 +24,7 @@
 
 
 //[MiscUserDefs] You can add your own user definitions and misc code here...
+using namespace mosc; // numeric/utility helpers (PI, modulo, getCoprimes, PointPair, ...)
 //[/MiscUserDefs]
 
 //==============================================================================
@@ -415,6 +416,12 @@ void ScaleStructureComponent::refreshColours()
 {
 	if (circle != nullptr)
 		circle->repaint();
+}
+
+void ScaleStructureComponent::setColourPickerLauncher(GroupingCircle::ColourPickerLauncher launcherIn)
+{
+	if (circle != nullptr)
+		circle->setColourPickerLauncher(std::move(launcherIn));
 }
 
 //==============================================================================

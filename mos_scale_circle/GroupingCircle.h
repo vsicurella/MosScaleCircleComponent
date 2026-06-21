@@ -25,9 +25,10 @@ public:
     ~GroupingCircle();
 
 	// Host-supplied launcher used to assign a colour to a group or degree. The component passes
-	// the target section's bounds (in this component's coordinates) and its current colour; the
-	// host shows its own picker and invokes onPicked(chosen) when the user commits. When this is
-	// left unset, a built-in juce::ColourSelector is shown in a CallOutBox instead.
+	// the target section's bounds (in screen coordinates, ready to anchor a CallOutBox) and its
+	// current colour; the host shows its own picker and invokes onPicked(chosen) when the user
+	// commits. When this is left unset, a built-in juce::ColourSelector is shown in a CallOutBox
+	// instead.
 	using ColourPickerLauncher = std::function<void (Rectangle<int> area, Colour current, std::function<void (Colour)> onPicked)>;
 	void setColourPickerLauncher(ColourPickerLauncher launcherIn);
 

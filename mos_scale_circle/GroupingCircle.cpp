@@ -10,6 +10,8 @@
 
 #include "GroupingCircle.h"
 
+using namespace mosc; // numeric/utility helpers (PI, modulo, getCoprimes, PointPair, ...)
+
 //==============================================================================
 GroupingCircle::GroupingCircle(const ScaleStructure& structureIn)
 	:	scaleStructure(structureIn)
@@ -1221,14 +1223,17 @@ void GroupingCircle::launchColourPicker()
 		repaint();
 	};
 
+	// The section bounds above are in this component's coordinates; translate to screen space so
+	// the host (or the built-in fallback) can anchor a CallOutBox directly.
+	Rectangle<int> screenArea = area.translated(getScreenPosition().x, getScreenPosition().y);
+
 	// Prefer the host-supplied launcher; otherwise show the built-in ColourSelector.
 	if (colourPickerLauncher)
 	{
-		colourPickerLauncher(area, current, onPicked);
+		colourPickerLauncher(screenArea, current, onPicked);
 		return;
 	}
 
-	Rectangle<int> screenArea = area.translated(getScreenPosition().x, getScreenPosition().y);
 	CallOutBox::launchAsynchronously(std::make_unique<ColourSelectorCallout>(current, onPicked),
 	                                 screenArea, nullptr);
 }

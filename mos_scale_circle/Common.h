@@ -10,6 +10,14 @@
 
 #pragma once
 
+// Numeric / utility helpers used throughout the module. They live in the `mosc` namespace so a host
+// application that defines its own global PI / modulo / getGCD / PointPair / arrayToString / etc.
+// (for example Lumatone Editor's lumatone_editor_library/common/{math,data,utility}.h) does not
+// clash when this module is consumed. Module source files bring them in with `using namespace mosc;`;
+// exposed headers (e.g. ScaleStructure.h) qualify them as `mosc::`.
+namespace mosc
+{
+
 const double PI = 3.14159265359f;
 
 template <class T>
@@ -154,3 +162,5 @@ static String arrayToString(const Array<T>& arrayIn, String name = "", char arra
 
 	return strOut;
 }
+
+} // namespace mosc

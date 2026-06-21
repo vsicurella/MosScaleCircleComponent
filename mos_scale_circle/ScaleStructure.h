@@ -43,7 +43,7 @@ private:
 	Array<int> scaleSizes; // Sizes supported by Period & Generator combo
 
 	Array<Point<int>> keyboardTypes; // Erv Wilson's notation
-	Array<PointPair<int>> pgCoords; // Hex Coordinates of period and generator
+	Array<mosc::PointPair<int>> pgCoords; // Hex Coordinates of period and generator
 	Array<Point<int>> stepSizes; // Hex step sizes
 
 	// Array of scale steps each scale size level creates
@@ -216,8 +216,8 @@ public:
 	Array<Point<int>> getKeyboardTypes() const;
 	Point<int> getKeyboardType(int ind) const;
 
-	Array<PointPair<int>> getPGCoords() const;
-	PointPair<int> getPGCoord(int ind) const;
+	Array<mosc::PointPair<int>> getPGCoords() const;
+	mosc::PointPair<int> getPGCoord(int ind) const;
 
 	Point<int> getStepSizes(int kbdTypeIn) const;
 	Point<int> getStepSize() const;
