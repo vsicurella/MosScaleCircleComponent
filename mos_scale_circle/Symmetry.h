@@ -11,104 +11,180 @@
 #pragma once
 
 /*
-	Takes an array and tries to arrange it symmetrically, such that the array can be wrapped into a symmetric circle
-	If array cannot be arranged symmetrically, function will return an empty array
-	This algorithm prefers higher values closer to the center (the "top" of the circle).
-	ex. [7, 7, 7, 5, 5] => [7, 7, 5, 5, 7]
+	Takes an array and arranges it to wrap into a circle that is symmetric about arrayOfValues[centerIndex],
+	which becomes element 0 of the result. If no symmetric arrangement exists (more than one value appears
+	an odd number of times among the non-center values), an empty array is returned.
+
+	The non-center values form a palindrome: one half, the odd-count leftover (if any) at the bottom of the
+	circle, then the half mirrored. The half is built one slot at a time, choosing the value that, in order
+	of priority:
+		1. keeps the fewest adjacent equal values around the whole circle (always the minimum possible),
+		2. avoids placing the center's own value right beside the center,
+		3. spreads values evenly around the circle: the most common value is spaced against all others,
+		   then each value is placed closest to its evenly-spaced ideal position,
+		4. is the smaller value (so smaller values tend to sit nearer the center).
+
+	ex. [7, 7, 7, 5, 5]    => [7, 5, 7, 7, 5]
+	    [7, 7, 7, 5, 5, 5] => [7, 5, 7, 5, 7, 5]
 */
 static Array<int> arrangeSymmetrically(Array<int> arrayOfValues, int centerIndex=0)
 {
-	Array<int> symmetricArray = { arrayOfValues[centerIndex] };
+	const int centerValue = arrayOfValues[centerIndex];
 	arrayOfValues.remove(centerIndex);
 
-	int arrangeSize = arrayOfValues.size();
-	bool isOdd = arrangeSize % 2;
-	Array<Point<int>> groupings; // [(unique value, number of appearances),...]
+	// unique values (ascending) and how many times each appears
 	Array<int> values;
+	for (auto v : arrayOfValues)
+		values.addIfNotAlreadyThere(v);
+	values.sort();
 
-	// find unique values and how many times they appear
-	for (auto num : arrayOfValues)
+	const int numValues = values.size();
+	Array<int> counts;
+	counts.insertMultiple(0, 0, numValues);
+	for (auto v : arrayOfValues)
+		counts.getReference(values.indexOf(v))++;
+
+	// the non-center values must form a palindrome, so at most one value may have an odd count
+	int middleIndex = -1;
+	for (int i = 0; i < numValues; i++)
 	{
-		int valInd = values.indexOf(num);
-
-		if (valInd < 0)
+		if (counts[i] % 2 == 1)
 		{
-			groupings.add(Point<int>(num, 1));
-			values.add(num);
+			if (middleIndex >= 0)
+				return Array<int>();
+			middleIndex = i;
 		}
-		else
+	}
+
+	const bool hasMiddle = middleIndex >= 0;
+	const int middleValue = hasMiddle ? values[middleIndex] : 0;
+
+	// per-value counts for the half, and totals around the whole circle (including the center)
+	Array<int> halfCounts, circleCounts, placed;
+	int halfSize = 0;
+	for (int i = 0; i < numValues; i++)
+	{
+		const int isCenter = values[i] == centerValue ? 1 : 0;
+		halfCounts.add(counts[i] / 2);
+		circleCounts.add(counts[i] + isCenter);
+		placed.add(isCenter);
+		halfSize += counts[i] / 2;
+	}
+
+	const int circleSize = arrayOfValues.size() + 1;
+
+	// The most common value (smaller value on ties); everything else separates its runs.
+	int dominantValue = centerValue;
+	int dominantCount = values.contains(centerValue) ? 0 : 1;
+	for (int i = 0; i < numValues; i++)
+	{
+		if (circleCounts[i] > dominantCount || (circleCounts[i] == dominantCount && values[i] < dominantValue))
 		{
-			Point<int>& pt = groupings.getReference(valInd);
-			pt.setY(pt.y + 1);
+			dominantValue = values[i];
+			dominantCount = circleCounts[i];
 		}
 	}
 
-	// already symmetric if only one type of value
-	if (groupings.size() == 1)
+	// Separators (non-dominant values) are spaced evenly from the center, Bresenham style.
+	// The phase is in half-slots: the center is a separator position unless it is the dominant value.
+	const int numSeparators = circleSize - dominantCount;
+	const int separatorPhase = centerValue != dominantValue ? 0 : 1;
+	auto separatorsBefore = [&](int slot) { return ((2 * slot + separatorPhase) * numSeparators) / (2 * circleSize); };
+	auto wantsSeparator = [&](int slot) { return numSeparators > 0 && separatorsBefore(slot) > separatorsBefore(slot - 1); };
+
+	// Lower bound on adjacent equal pairs in the sequence: first, (any order of) remaining, last (if hasLast).
+	// A value's runs must be split by other values, so it can't have more runs than its separators allow.
+	auto minAdjacentDuplicates = [&](int first, const Array<int>& remaining, bool hasLast, int last)
 	{
-		symmetricArray.addArray(arrayOfValues);
-		return symmetricArray;
-	}
+		int remainingSize = 0;
+		for (auto c : remaining)
+			remainingSize += c;
 
-	Array<int> oddGroupIdx;
-	for (int i = 0; i < values.size(); i++)
-	{
-		if (groupings[i].y % 2 == 1)
-			oddGroupIdx.add(i);
-	}
-
-	// determine if symmetry is possible
-	// odd needs ONE odd group, even needs ZERO odd groups
-	if ((isOdd && oddGroupIdx.size() != 1) || (!isOdd && oddGroupIdx.size() > 0)) 
-	{
-		return Array<int>();
-	}
-
-	int oddGroupValue;
-	if (isOdd)
-		oddGroupValue = values[oddGroupIdx[0]];
-
-	// sort by increasing value, but we will use this in reverse
-	Array<int> sortedValues = values;
-	sortedValues.sort();
-
-	// move odd group to first index
-	if (isOdd)
-	{
-		sortedValues.removeFirstMatchingValue(oddGroupValue);
-		sortedValues.insert(0, oddGroupValue);
-	}
-
-	// rebuild groupings with sorted order
-	Array<Point<int>> sortedGroupings;
-	for (auto val : sortedValues)
-	{
-		sortedGroupings.add(groupings.getReference(values.indexOf(val)));
-	}
-
-	// populate symmetric array
-	int i = 0;
-	int valInd = values.size() - 1;
-	bool increment = false;
-	while (i < arrayOfValues.size())
-	{
-		int num = sortedGroupings.getReference(valInd).y;
-		if (valInd != 0)
-			num = num / 2;
-		else
-			increment = true;
-
-		for (int n = 0; n < num; n++)
+		const int length = 1 + remainingSize + (hasLast ? 1 : 0);
+		int bound = 0;
+		for (int i = 0; i < numValues; i++)
 		{
-			symmetricArray.add(sortedValues[valInd]);
-			i++;
+			const int v = values[i];
+			const int count = remaining[i] + (first == v ? 1 : 0) + (hasLast && last == v ? 1 : 0);
+			if (count == 0)
+				continue;
+
+			const bool lastCanBeV = hasLast ? last == v : (remaining[i] > 0 || (remainingSize == 0 && first == v));
+			const int endsNotV = (first != v ? 1 : 0) + (lastCanBeV ? 0 : 1);
+			const int maxRuns = (length - count) + 1 - endsNotV;
+			bound = jmax(bound, count - maxRuns);
+		}
+		return bound;
+	};
+
+	// Build the half, from beside the center down toward the bottom of the circle
+	Array<int> half;
+	int previous = centerValue;
+	for (int slot = 1; slot <= halfSize; slot++)
+	{
+		const bool separatorSlot = wantsSeparator(slot);
+
+		int bestIndex = -1;
+		int bestDuplicates = 0, bestFlank = 0, bestMismatch = 0;
+		int64 bestNextNum = 0, bestNextDen = 1;
+
+		for (int i = 0; i < numValues; i++)
+		{
+			if (halfCounts[i] == 0)
+				continue;
+
+			const int v = values[i];
+
+			halfCounts.getReference(i)--;
+			const int duplicates = (v == previous ? 1 : 0) + minAdjacentDuplicates(v, halfCounts, hasMiddle, middleValue);
+			halfCounts.getReference(i)++;
+
+			const int flank = (slot == 1 && v == centerValue) ? 1 : 0;
+			const int mismatch = ((v != dominantValue) != separatorSlot) ? 1 : 0;
+
+			// next evenly-spaced ideal position of v: (placed + phase) * circleSize / circleCount,
+			// with phase 0 for the center's value (it sits at position 0) and 1/2 otherwise
+			const int64 nextNum = (int64) (2 * placed[i] + (v == centerValue ? 0 : 1)) * circleSize;
+			const int64 nextDen = (int64) 2 * circleCounts[i];
+
+			bool better = bestIndex < 0;
+			if (! better)
+			{
+				if (duplicates != bestDuplicates)
+					better = duplicates < bestDuplicates;
+				else if (flank != bestFlank)
+					better = flank < bestFlank;
+				else if (mismatch != bestMismatch)
+					better = mismatch < bestMismatch;
+				else
+					better = nextNum * bestNextDen < bestNextNum * nextDen; // ties keep the smaller value
+			}
+
+			if (better)
+			{
+				bestIndex = i;
+				bestDuplicates = duplicates;
+				bestFlank = flank;
+				bestMismatch = mismatch;
+				bestNextNum = nextNum;
+				bestNextDen = nextDen;
+			}
 		}
 
-		if (increment)
-			valInd++;
-		else
-			valInd--;
+		half.add(values[bestIndex]);
+		halfCounts.getReference(bestIndex)--;
+		placed.getReference(bestIndex)++;
+		previous = values[bestIndex];
 	}
+
+	Array<int> symmetricArray = { centerValue };
+	symmetricArray.addArray(half);
+
+	if (hasMiddle)
+		symmetricArray.add(middleValue);
+
+	for (int i = half.size() - 1; i >= 0; i--)
+		symmetricArray.add(half[i]);
 
 	return symmetricArray;
 }
