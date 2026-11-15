@@ -97,19 +97,41 @@ void ScaleStructure::setAll(
 		chromaAlterations = chromaAlterationsIn;
 	}
 
+	// Restore a passed-in grouping (scale size indices) if it's valid for this structure: every index
+	// is a scale size and the sizes fill the period. It's kept as-is when already symmetric, otherwise
+	// rearranged symmetrically; if neither works, fall back to the suggested grouping.
+	bool groupingApplied = false;
 	if (degreeGroupSizeIndiciesIn.size() > 0)
 	{
-		// TODO: check if valid scale size
-		degreeGroupScaleSizes = degreeGroupSizeIndiciesIn;
+		bool indicesValid = true;
+		int sum = 0;
+		for (auto i : degreeGroupSizeIndiciesIn)
+		{
+			if (i < 0 || i >= scaleSizes.size())
+			{
+				indicesValid = false;
+				break;
+			}
+			sum += scaleSizes[i];
+		}
 
-		// TODO: symmetric checks/fixes
-		arrangeSymmetrically(degreeGroupScaleSizes);
-		fillSymmetricGrouping();
+		if (indicesValid && sum == fPeriod)
+		{
+			Array<int> grouping = isSymmetric(degreeGroupSizeIndiciesIn)
+				? degreeGroupSizeIndiciesIn
+				: arrangeSymmetrically(degreeGroupSizeIndiciesIn);
+
+			if (grouping.size() > 0)
+			{
+				degreeGroupIndexedSizes = grouping;
+				fillSymmetricGrouping();
+				groupingApplied = true;
+			}
+		}
 	}
-	else
-	{
+
+	if (! groupingApplied)
 		useSuggestedSizeGrouping();
-	}
 
 	// Mirror the resulting state into the tree and broadcast the most relevant change.
 	syncStateFromMembers();
