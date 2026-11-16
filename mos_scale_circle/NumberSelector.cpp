@@ -291,8 +291,8 @@ void NumberSelector::resized()
 
 	if (isShowingName())
 	{
-		titleLabel->setFont(Font().withHeight(proportionOfHeight(0.2f)));
-		int nameStringWidth = titleLabel->getFont().getStringWidth(getName()) * 1.05f;
+		titleLabel->setFont(Font(FontOptions(proportionOfHeight(0.2f))));
+		int nameStringWidth = GlyphArrangement::getStringWidthInt(titleLabel->getFont(), getName()) * 1.05f;
 		int nameStringHeight = titleLabel->getFont().getHeight();
 
 		controlHeight -= nameStringHeight;

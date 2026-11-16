@@ -384,13 +384,13 @@ void GroupingCircle::resized()
 		{
 			Font measureFont = (showNoteNameLabels && noteNames)
 				? noteNames->getNoteNameFont().withHeight(degreeLabelSize)
-				: Font().withHeight(degreeLabelSize);
+				: Font(FontOptions(degreeLabelSize));
 
 			String text = (showNoteNameLabels && noteNames)
 				? noteNames->getChainIndexName(i)
 				: String(groupChain[i]);
 
-			widestText = jmax(widestText, measureFont.getStringWidthFloat(text));
+			widestText = jmax(widestText, GlyphArrangement::getStringWidth(measureFont, text));
 		}
 
 		if (widestText > maxLabelWidth)
@@ -425,7 +425,7 @@ void GroupingCircle::resized()
 		// find label size
 		degreeLabel = degreeLabels[i];
 		degreeLabel->clear();
-		degreeLabel->setFont(Font().withHeight(degreeLabelSize));
+		degreeLabel->setFont(Font(FontOptions(degreeLabelSize)));
 
 		// fill labels with text
 		degree = groupChain[i];
@@ -447,7 +447,7 @@ void GroupingCircle::resized()
 					degreeText += "+";
 
 				degreeText += String(alteration.y);
-				degreeLabel->setFont(Font(round(degreeLabelSize / 4.0f)));
+				degreeLabel->setFont(Font(FontOptions((float) round(degreeLabelSize / 4.0f))));
 				degreeLabel->insertTextAtCaret(degreeText);
 			}
 		}
@@ -472,8 +472,8 @@ void GroupingCircle::resized()
 			groupLabelAngle = (groupAngleFrom + angleTo) / 2.0f - float_HalfPi;
 
 			groupLabel = groupSizeLabels[groupIndex];
-			groupLabel->setFont(Font().withHeight(groupLabelSize));
-			groupLabelWidth = groupLabel->getFont().getStringWidthFloat(groupLabel->getText());
+			groupLabel->setFont(Font(FontOptions(groupLabelSize)));
+			groupLabelWidth = GlyphArrangement::getStringWidth(groupLabel->getFont(), groupLabel->getText());
 			groupLabel->setSize(jmax(groupLabelWidth, groupLabelSize), groupLabelSize);
 
 			groupLabel->setCentrePosition(Point<int>(

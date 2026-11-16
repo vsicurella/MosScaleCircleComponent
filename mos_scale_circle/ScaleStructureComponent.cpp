@@ -85,7 +85,7 @@ void ScaleStructureComponent::buildComponent()
 
 	generatorValueLbl.reset(new Label("generatorValueLbl"));
 	addAndMakeVisible(generatorValueLbl.get());
-	generatorValueLbl->setFont(Font(16.0f, Font::plain).withTypefaceStyle("Regular"));
+	generatorValueLbl->setFont(Font(FontOptions(16.0f, Font::plain)).withTypefaceStyle("Regular"));
 	generatorValueLbl->setJustificationType(Justification::centred);
 	generatorValueLbl->setEditable(false, false, false);
 	generatorValueLbl->setColour(TextEditor::textColourId, Colours::black);
@@ -110,7 +110,7 @@ void ScaleStructureComponent::buildComponent()
 
 	stepSizePatternLbl.reset(new Label("stepSizePatternLbl"));
 	addAndMakeVisible(stepSizePatternLbl.get());
-	stepSizePatternLbl->setFont(Font(16.0f, Font::plain).withTypefaceStyle("Regular"));
+	stepSizePatternLbl->setFont(Font(FontOptions(16.0f, Font::plain)).withTypefaceStyle("Regular"));
 	stepSizePatternLbl->setJustificationType(Justification::centred);
 	stepSizePatternLbl->setEditable(false, false, false);
 	stepSizePatternLbl->setColour(TextEditor::textColourId, Colours::black);
@@ -207,8 +207,8 @@ void ScaleStructureComponent::resized()
 	generatorValueLbl->setCentrePosition(circle->getIntPointFromCenter(circle->getInnerRadius() * 2.0f / 3.0f, MathConstants<float>::pi * 11.0f / 8.0f));
 	stepSizePatternLbl->setCentrePosition(circle->getIntPointFromCenter(circle->getInnerRadius() * 2.0f / 3.0f, MathConstants<float>::pi * 5.0f / 8.0f));
 
-	offsetLabel->setFont(Font().withHeight(getHeight() / 48.0f));
-	offsetLabel->setSize(offsetLabel->getFont().getStringWidth("Offset") * 2, offsetLabel->getFont().getHeight() * 3);
+	offsetLabel->setFont(Font(FontOptions(getHeight() / 48.0f)));
+	offsetLabel->setSize(GlyphArrangement::getStringWidthInt(offsetLabel->getFont(), "Offset") * 2, offsetLabel->getFont().getHeight() * 3);
 	offsetLabel->setCentrePosition(circle->getIntPointFromCenter(circle->getInnerRadius() * 7.0f / 8.0f, 0));
 
 	// Default (group ring shown): the Scale Size selector sits in the group ring at the top.

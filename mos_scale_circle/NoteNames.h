@@ -17,8 +17,8 @@ class NoteNames
 
 	bool brightGenerator = false;
 
-	Font noteNameFont;
-	Font accidentalFont;
+	Font noteNameFont { FontOptions() };
+	Font accidentalFont { FontOptions() };
 
 	// Used in building table
 	StringArray nominals;

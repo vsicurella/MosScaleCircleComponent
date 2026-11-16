@@ -35,7 +35,7 @@ public:
 	{
 		Font font = getComboBoxFont(cb);
 		String text = cb.getText();
-		int textWidth = font.getStringWidth(text);
+		int textWidth = GlyphArrangement::getStringWidthInt(font, text);
 		int textHeight = font.getHeight();
 		int marginF = 128;
 		float margin = (marginF + 1) / marginF;
@@ -52,7 +52,7 @@ public:
 
 	Font getComboBoxFont(ComboBox& cb) override
 	{
-		return Font().withHeight(cb.getHeight());
+		return Font(FontOptions((float) cb.getHeight()));
 	}
 
 	Label* createComboBoxTextBox(ComboBox& cb) override
@@ -121,12 +121,12 @@ public:
 
 	void getIdealPopupMenuItemSize(const String& text, bool isSeparator, int standardMenuItemHeight, int& idealWidth, int& idealHeight) override
 	{
-		idealWidth = getPopupMenuFont().getStringWidth(text);
+		idealWidth = GlyphArrangement::getStringWidthInt(getPopupMenuFont(), text);
 		idealHeight = standardMenuItemHeight;
 	}
 
 	Font getPopupMenuFont() override
 	{
-		return Font().boldened();
+		return Font(FontOptions()).boldened();
 	}
 };

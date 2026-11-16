@@ -178,7 +178,7 @@ private:
 	IntRange selectionRange;
 	IntList selectionList;
 
-	Font valueFont;
+	Font valueFont { FontOptions() };
 
 private:
 
