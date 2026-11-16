@@ -119,7 +119,7 @@ void ScaleStructure::setAll(
 		{
 			Array<int> grouping = isSymmetric(degreeGroupSizeIndiciesIn)
 				? degreeGroupSizeIndiciesIn
-				: arrangeSymmetrically(degreeGroupSizeIndiciesIn);
+				: arrangeSymmetrically(degreeGroupSizeIndiciesIn, 0, getFillerSizeIndexThreshold());
 
 			if (grouping.size() > 0)
 			{
@@ -1743,6 +1743,133 @@ Array<int> ScaleStructure::getComplimentarySizeGrouping()
 	return grouping;
 }
 
+int ScaleStructure::getFillerSizeIndexThreshold() const
+{
+	const int mainSize = scaleSizes[sizeIndexSelected];
+	for (int i = sizeIndexSelected - 1; i >= 0; i--)
+	{
+		if (scaleSizes[i] < mainSize)
+			return scaleSizes.indexOf(scaleSizes[i]);
+	}
+
+	return 0;
+}
+
+Array<int> ScaleStructure::getReducedFillerGrouping(int maxFillerGroups)
+{
+	const int mainSize = scaleSizes[sizeIndexSelected];
+
+	// the next smaller scale size, which may be used freely alongside the selected size
+	int nextIndex = -1;
+	for (int i = sizeIndexSelected - 1; i >= 0 && nextIndex < 0; i--)
+	{
+		if (scaleSizes[i] < mainSize)
+			nextIndex = i;
+	}
+
+	if (nextIndex < 0 || mainSize <= 0 || maxFillerGroups < 0)
+		return Array<int>();
+
+	const int nextSize = scaleSizes[nextIndex];
+	const int fillerBelow = scaleSizes.indexOf(nextSize);
+
+	// distinct filler sizes, larger first
+	Array<int> fillerIndices;
+	for (int i = fillerBelow - 1; i >= 0; i--)
+	{
+		if (scaleSizes.indexOf(scaleSizes[i]) == i)
+			fillerIndices.add(i);
+	}
+
+	struct Candidate
+	{
+		int numMain, numNext;
+		Array<int> filler; // size indices, larger sizes first
+	};
+
+	std::vector<Candidate> candidates;
+	Array<int> filler;
+
+	for (int numMain = 1; numMain * mainSize <= fPeriod; numMain++)
+	{
+		for (int numNext = 0; numMain * mainSize + numNext * nextSize <= fPeriod; numNext++)
+		{
+			// every multiset of up to maxFillerGroups filler sizes that fills the remainder
+			std::function<void(int, int)> addFillers = [&](int firstFiller, int notesLeft)
+			{
+				if (notesLeft == 0)
+				{
+					// symmetric only if at most one size (besides the center) has an odd count
+					int oddCounts = ((numMain - 1) % 2) + (numNext % 2);
+					for (auto f : fillerIndices)
+					{
+						int count = 0;
+						for (auto used : filler)
+							count += used == f ? 1 : 0;
+						oddCounts += count % 2;
+					}
+
+					if (oddCounts <= 1)
+						candidates.push_back({ numMain, numNext, filler });
+
+					return;
+				}
+
+				if (filler.size() == maxFillerGroups)
+					return;
+
+				for (int f = firstFiller; f < fillerIndices.size(); f++)
+				{
+					const int size = scaleSizes[fillerIndices[f]];
+					if (size <= 0 || size > notesLeft)
+						continue;
+
+					filler.add(fillerIndices[f]);
+					addFillers(f, notesLeft - size);
+					filler.removeLast();
+				}
+			};
+
+			addFillers(0, fPeriod - numMain * mainSize - numNext * nextSize);
+		}
+	}
+
+	// fewest filler groups, then fewest groups, then larger filler sizes
+	std::stable_sort(candidates.begin(), candidates.end(), [&](const Candidate& a, const Candidate& b)
+	{
+		if (a.filler.size() != b.filler.size())
+			return a.filler.size() < b.filler.size();
+
+		const int aGroups = a.numMain + a.numNext + a.filler.size();
+		const int bGroups = b.numMain + b.numNext + b.filler.size();
+		if (aGroups != bGroups)
+			return aGroups < bGroups;
+
+		for (int i = 0; i < a.filler.size(); i++)
+		{
+			if (a.filler[i] != b.filler[i])
+				return scaleSizes[a.filler[i]] > scaleSizes[b.filler[i]];
+		}
+
+		return false;
+	});
+
+	for (const auto& candidate : candidates)
+	{
+		Array<int> grouping;
+		grouping.insertMultiple(-1, sizeIndexSelected, candidate.numMain);
+		grouping.insertMultiple(-1, nextIndex, candidate.numNext);
+		grouping.addArray(candidate.filler);
+
+		// filler belongs opposite the main group; skip candidates where symmetry forces it beside the center
+		Array<int> arranged = arrangeSymmetrically(grouping, 0, fillerBelow);
+		if (arranged.size() > 0 && ! (arranged.size() > 1 && arranged[1] < fillerBelow))
+			return arranged;
+	}
+
+	return Array<int>();
+}
+
 void ScaleStructure::useSuggestedSizeGrouping()
 {
 	Array<Array<int>> groupings;
@@ -1766,8 +1893,25 @@ void ScaleStructure::useSuggestedSizeGrouping()
 			index = s;
 	}
 
-	// make symmetric and fill degree groupings
-	degreeGroupIndexedSizes = arrangeSymmetrically(groupings[index]);
+	const Array<int>& chosen = groupings[index];
+	const int fillerBelow = getFillerSizeIndexThreshold();
+
+	int fillerGroups = 0;
+	for (auto sizeIndex : chosen)
+	{
+		if (sizeIndex < fillerBelow)
+			fillerGroups++;
+	}
+
+	// Filler sizes are a last resort: if the chosen grouping uses them, look for one that needs fewer
+	Array<int> reduced;
+	if (fillerGroups > 0)
+		reduced = getReducedFillerGrouping(jmin(6, fillerGroups - 1));
+
+	// make symmetric (filler at the bottom) and fill degree groupings
+	degreeGroupIndexedSizes = reduced.size() > 0
+		? reduced
+		: arrangeSymmetrically(chosen, 0, fillerBelow);
 
 	//DBG("Symmetric group:");
 	//String dbgstr = "";

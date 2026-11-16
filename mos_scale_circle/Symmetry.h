@@ -24,10 +24,14 @@
 		   then each value is placed closest to its evenly-spaced ideal position,
 		4. is the smaller value (so smaller values tend to sit nearer the center).
 
+	Values below bottomBelow are "filler": they skip the rules above and go at the bottom of the circle,
+	opposite the center, with smaller values closest to the bottom.
+
 	ex. [7, 7, 7, 5, 5]    => [7, 5, 7, 7, 5]
 	    [7, 7, 7, 5, 5, 5] => [7, 5, 7, 5, 7, 5]
+	    [7, 5, 5, 3, 3, 2] => [7, 5, 3, 2, 3, 5]  (bottomBelow = 5)
 */
-static Array<int> arrangeSymmetrically(Array<int> arrayOfValues, int centerIndex=0)
+static Array<int> arrangeSymmetrically(Array<int> arrayOfValues, int centerIndex=0, int bottomBelow=std::numeric_limits<int>::min())
 {
 	const int centerValue = arrayOfValues[centerIndex];
 	arrayOfValues.remove(centerIndex);
@@ -59,25 +63,43 @@ static Array<int> arrangeSymmetrically(Array<int> arrayOfValues, int centerIndex
 	const bool hasMiddle = middleIndex >= 0;
 	const int middleValue = hasMiddle ? values[middleIndex] : 0;
 
-	// per-value counts for the half, and totals around the whole circle (including the center)
+	// filler half, larger values first so the smallest sit closest to the bottom
+	auto isFiller = [&](int v) { return v < bottomBelow; };
+	Array<int> fillerHalf;
+	for (int i = numValues - 1; i >= 0; i--)
+	{
+		if (isFiller(values[i]))
+			fillerHalf.insertMultiple(-1, values[i], counts[i] / 2);
+	}
+
+	// the value just below the arranged half: the first filler, else the middle, else the half's own mirror
+	const bool hasBottomNeighbour = fillerHalf.size() > 0 || hasMiddle;
+	const int bottomNeighbour = fillerHalf.size() > 0 ? fillerHalf[0] : middleValue;
+	const bool middleIsArranged = hasMiddle && ! isFiller(middleValue);
+
+	// per-value counts for the arranged (non-filler) half, and totals around the arranged circle (including the center)
 	Array<int> halfCounts, circleCounts, placed;
 	int halfSize = 0;
 	for (int i = 0; i < numValues; i++)
 	{
 		const int isCenter = values[i] == centerValue ? 1 : 0;
-		halfCounts.add(counts[i] / 2);
-		circleCounts.add(counts[i] + isCenter);
+		const int arrangedCount = isFiller(values[i]) ? 0 : counts[i];
+		halfCounts.add(arrangedCount / 2);
+		circleCounts.add(arrangedCount + isCenter);
 		placed.add(isCenter);
-		halfSize += counts[i] / 2;
+		halfSize += arrangedCount / 2;
 	}
 
-	const int circleSize = arrayOfValues.size() + 1;
+	const int circleSize = 1 + 2 * halfSize + (middleIsArranged ? 1 : 0);
 
 	// The most common value (smaller value on ties); everything else separates its runs.
 	int dominantValue = centerValue;
 	int dominantCount = values.contains(centerValue) ? 0 : 1;
 	for (int i = 0; i < numValues; i++)
 	{
+		if (circleCounts[i] == 0)
+			continue;
+
 		if (circleCounts[i] > dominantCount || (circleCounts[i] == dominantCount && values[i] < dominantValue))
 		{
 			dominantValue = values[i];
@@ -136,7 +158,7 @@ static Array<int> arrangeSymmetrically(Array<int> arrayOfValues, int centerIndex
 			const int v = values[i];
 
 			halfCounts.getReference(i)--;
-			const int duplicates = (v == previous ? 1 : 0) + minAdjacentDuplicates(v, halfCounts, hasMiddle, middleValue);
+			const int duplicates = (v == previous ? 1 : 0) + minAdjacentDuplicates(v, halfCounts, hasBottomNeighbour, bottomNeighbour);
 			halfCounts.getReference(i)++;
 
 			const int flank = (slot == 1 && v == centerValue) ? 1 : 0;
@@ -176,6 +198,8 @@ static Array<int> arrangeSymmetrically(Array<int> arrayOfValues, int centerIndex
 		placed.getReference(bestIndex)++;
 		previous = values[bestIndex];
 	}
+
+	half.addArray(fillerHalf);
 
 	Array<int> symmetricArray = { centerValue };
 	symmetricArray.addArray(half);

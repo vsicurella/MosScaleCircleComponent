@@ -416,6 +416,23 @@ public:
 
 	Array<int> getNestedSizeGrouping();
 	Array<int> getComplimentarySizeGrouping();
+
+	/*
+		Scale size indices below the returned index are "filler" sizes: more than one MOS size smaller
+		than the selected size (ex. 3, 2, 1 when the selected size is 7 and the next smaller is 5).
+		Returns 0 (no filler) if the selected size is the smallest.
+	*/
+	int getFillerSizeIndexThreshold() const;
+
+	/*
+		Searches groupings built from the selected size and the next smaller size, filling any remainder
+		with as few filler groups as possible (at most maxFillerGroups). Candidates are tried by fewest
+		filler groups, then fewest groups overall, then larger filler sizes, and the first one whose
+		symmetric arrangement keeps filler away from the center group is returned, already arranged.
+		Returns an empty array if none qualifies.
+	*/
+	Array<int> getReducedFillerGrouping(int maxFillerGroups);
+
 	void useSuggestedSizeGrouping();
 
 	/*
