@@ -116,10 +116,24 @@ private:
 	// Guards the internal members -> tree sync so it isn't mistaken for an external edit.
 	bool inhibitStateCallback = false;
 
+	// Set by splitDegreeGroup / mergeDegreeGroups just before they call setDegreeGrouping: for
+	// each group of the new grouping, the old group whose colour it carries on (-1 = a new piece).
+	// Empty otherwise, in which case setDegreeGrouping matches groups by shared degrees.
+	Array<int> pendingGroupOrigins;
+
 private:
 	/*
 		Private methods
 	*/
+
+	// Re-keys the group colour table after an edit replaced the grouping. originOfNewGroup[n] is
+	// the old group whose colour new group n inherits, or -1. See setGroupColourTable for the
+	// table's layout.
+	void remapGroupColours(const Array<int>& originOfNewGroup, int oldGroupCount);
+
+	// For each new group, the old group it shares the most degrees with (each old group used at
+	// most once, ties to the lower index); -1 where nothing is left to inherit.
+	static Array<int> matchGroupsByOverlap(const Array<Array<int>>& oldGroups, const Array<Array<int>>& newGroups);
 
 	// Master/follower helpers.
 	void initState();                                       // create tree + attach listener
@@ -269,8 +283,28 @@ public:
 	void setColourMode(ColourMode modeIn);
 	ColourMode getColourMode() const;
 
+	/*
+		The group colour table: entries [0, number of groups) are the current groups' colours, and
+		anything past that is colours set aside for later. Group colours follow their group through
+		grouping edits and are never thrown away:
+		  - split: the original group keeps its colour; the new piece takes a set-aside colour.
+		  - merge: the group that wasn't swallowed keeps its colour; the swallowed one's is set aside.
+		  - resize, or a grouping set from outside: each new group inherits from the old group it
+		    shares the most degrees with.
+		  - period / generator / size / offset changes rebuild the grouping, so colours stay by
+		    position: fewer groups leaves the extra colours set aside, more groups brings them back.
+		A transparent entry means "no colour yet"; fill those with fillUnassignedGroupColours.
+	*/
 	void setGroupColourTable(Array<Colour>& tableIn);
 	void setDegreeOverrideTable(Array<Colour>& tableIn);
+
+	/*
+		Makes sure every current group has a colour: grows the table to the group count if needed and
+		gives each transparent entry the first defaultForIndex(0, 1, 2, ...) not already used by
+		another current group, so no two groups share a default. Never shrinks the table, so set-aside
+		colours survive. Returns true if anything changed.
+	*/
+	bool fillUnassignedGroupColours(const std::function<Colour(int)>& defaultForIndex);
 
 	/*
 		Returns the resolved colour of a scale degree: in ByDegree, its per-degree override if
@@ -404,10 +438,13 @@ public:
 	void resizeDegreeGroup(int groupIndex, int sizeChangeAmount, bool draggedClockwise);
 
 	/*
-		Merges two adjacent groups. The new group size must be a valid size that the scale structure supports.
-		If retaining symmetry, this also effects the group on the other side.
+		Merges groupIndex with the adjacent group groupIndex - 1. The new group size must be a valid
+		size that the scale structure supports. If retaining symmetry, this also effects the group on
+		the other side.
+		groupIndexConsumed says which of the two was swallowed: true means groupIndex was absorbed
+		into groupIndex - 1 (whose colour carries on); false means the reverse.
 	*/
-	void mergeDegreeGroups(int groupIndex);
+	void mergeDegreeGroups(int groupIndex, bool groupIndexConsumed = false);
 
 	// Returns the index whose generator is closest to a perfect fifth
 	int getSuggestedGeneratorIndex();

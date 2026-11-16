@@ -390,10 +390,10 @@ void ScaleStructureComponent::groupingResized(int groupIndex, int sizeChangeAmou
 	listeners.call(&ScaleStructureComponent::Listener::scaleStructureChanged);
 }
 
-void ScaleStructureComponent::groupingsMerged(int groupIndex)
+void ScaleStructureComponent::groupingsMerged(int groupIndex, bool groupIndexConsumed)
 {
 	DBG("SSC: Group " + String(groupIndex) + " merged with group " + String(groupIndex - 1));
-	scaleStructure.mergeDegreeGroups(groupIndex);
+	scaleStructure.mergeDegreeGroups(groupIndex, groupIndexConsumed);
 	ensureColourTablesSized();
 	listeners.call(&ScaleStructureComponent::Listener::scaleStructureChanged);
 }
@@ -560,10 +560,9 @@ void ScaleStructureComponent::ensureColourTablesSized()
 	if (!ownsColourTables || !scaleStructure.isValid())
 		return;
 
-	// One colour per group; seed any newly-added group slots from the default palette.
-	const int numGroups = scaleStructure.getDegreeGroupings().size();
-	for (int i = ownedGroupColours.size(); i < numGroups; ++i)
-		ownedGroupColours.add(defaultGroupColour(i));
+	// One colour per group: groups without one (new, or split off) get the first default not
+	// already in use. Never shrinks, so colours set aside by a merge or a smaller scale come back.
+	scaleStructure.fillUnassignedGroupColours([](int i) { return defaultGroupColour(i); });
 
 	// One override slot per scale degree; new entries default to transparent ("no override").
 	const int period = scaleStructure.getPeriod();

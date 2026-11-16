@@ -70,7 +70,7 @@ public:
 	void allModificationsReset() override;
 	void groupingSplit(int groupIndex, int sizeChangeAmount) override;
 	void groupingResized(int groupIndex, int sizeChangeAmount, bool draggedClockwise) override;
-	void groupingsMerged(int groupIndex) override;
+	void groupingsMerged(int groupIndex, bool groupIndexConsumed) override;
 	void groupColourChanged(int groupIndex, Colour newColour) override;
 	void degreeColourChanged(int degreeIndex, Colour newColour) override;
 

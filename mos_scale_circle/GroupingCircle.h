@@ -84,7 +84,9 @@ public:
 
 		virtual void groupingSplit(int groupIndex, int sizeChangeAmount) = 0;
 		virtual void groupingResized(int groupIndex, int sizeChangeAmount, bool draggedClockwise) = 0;
-		virtual void groupingsMerged(int groupIndex) = 0;
+		// groupIndexConsumed: true if groupIndex was swallowed by groupIndex - 1 (edge dragged clockwise),
+		// false if groupIndex - 1 was swallowed by groupIndex.
+		virtual void groupingsMerged(int groupIndex, bool groupIndexConsumed) = 0;
 
 		// Called when the user assigns a colour to a degree group (or a single degree) from the wheel.
 		// Pass a transparent colour to clear a per-degree override.

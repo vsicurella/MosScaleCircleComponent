@@ -1099,7 +1099,7 @@ void GroupingCircle::mouseUp(const MouseEvent& event)
 
 				// If adjacent group is consumed, do a merge
 				if (groupsMerged)
-					listeners.call(&Listener::groupingsMerged, groupIndex);
+					listeners.call(&Listener::groupingsMerged, groupIndex, handleBeingDragged->isDraggingClockwise());
 				else
 					listeners.call(&Listener::groupingResized, groupIndex, handleDragAmt, handleBeingDragged->isDraggingClockwise());
 			}

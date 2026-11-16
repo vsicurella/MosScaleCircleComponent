@@ -1238,12 +1238,20 @@ void ScaleStructure::setDegreeGrouping(Array<int> groupingSizeIndiciesIn)
 
 	if (sum == fPeriod)
 	{
+		const Array<Array<int>> oldGroups = degreeGroupings;
+
 		degreeGroupIndexedSizes = groupingSizeIndiciesIn;
 
 		if (sym)
 			fillSymmetricGrouping();
 		else
 			return; // TODO: bring back other degree grouping function
+
+		// Carry each group's colour over to wherever that group went, before anyone is told.
+		const Array<int> origins = (pendingGroupOrigins.size() == degreeGroupings.size())
+			? pendingGroupOrigins
+			: matchGroupsByOverlap(oldGroups, degreeGroupings);
+		remapGroupColours(origins, oldGroups.size());
 
 		syncStateFromMembers();
 		notifyChange(ScaleStructureIDs::degreeGroups);
@@ -1292,22 +1300,37 @@ void ScaleStructure::splitDegreeGroup(int groupIndexIn, int sizeChangeAmount)
 		return;
 	}
 
+	// Alongside each new group, note the old group whose colour it carries on: the part of a split
+	// group that stays keeps the colour (origin i); the piece split off is new (origin -1).
 	Array<int> newGrouping;
+	Array<int> origins;
+	auto addGroup = [&](int sizeIndex, int origin)
+	{
+		newGrouping.add(sizeIndex);
+		origins.add(origin);
+	};
+
 	for (int i = 0; i < degreeGroupIndexedSizes.size(); i++)
 	{
 		if (i != groupIndexIn && i != symGroupIndex)
 		{
-			newGrouping.add(degreeGroupIndexedSizes[i]);
+			addGroup(degreeGroupIndexedSizes[i], i);
 		}
 
 		else if (i == groupIndexIn && groupIndexIn == symGroupIndex)
 		{
-			newGrouping.add(newSizeIndex);
-
 			if (groupSize > 0)
-				newGrouping.add(groupSizeIndex);
-
-			newGrouping.add(newSizeIndex);
+			{
+				addGroup(newSizeIndex, -1);
+				addGroup(groupSizeIndex, i);
+				addGroup(newSizeIndex, -1);
+			}
+			else
+			{
+				// Split clean in two: nothing stays, so the first half carries the colour on.
+				addGroup(newSizeIndex, i);
+				addGroup(newSizeIndex, -1);
+			}
 		}
 
 		else if (i == groupIndexIn)
@@ -1315,13 +1338,13 @@ void ScaleStructure::splitDegreeGroup(int groupIndexIn, int sizeChangeAmount)
 
 			if (!newGroupClockwise)
 			{
-				newGrouping.add(groupSizeIndex);
-				newGrouping.add(newSizeIndex);
+				addGroup(groupSizeIndex, i);
+				addGroup(newSizeIndex, -1);
 			}
 			else
 			{
-				newGrouping.add(newSizeIndex);
-				newGrouping.add(groupSizeIndex);
+				addGroup(newSizeIndex, -1);
+				addGroup(groupSizeIndex, i);
 			}
 		}
 
@@ -1330,17 +1353,18 @@ void ScaleStructure::splitDegreeGroup(int groupIndexIn, int sizeChangeAmount)
 			// Inverse for symmetric group
 			if (newGroupClockwise)
 			{
-				newGrouping.add(groupSizeIndex);
-				newGrouping.add(newSizeIndex);
+				addGroup(groupSizeIndex, i);
+				addGroup(newSizeIndex, -1);
 			}
 			else
 			{
-				newGrouping.add(newSizeIndex);
-				newGrouping.add(groupSizeIndex);
+				addGroup(newSizeIndex, -1);
+				addGroup(groupSizeIndex, i);
 			}
 		}
 	}
 
+	const ScopedValueSetter<Array<int>> originHint(pendingGroupOrigins, origins);
 	setDegreeGrouping(newGrouping);
 }
 
@@ -1489,10 +1513,11 @@ void ScaleStructure::resizeDegreeGroup(int groupIndex, int sizeChangeAmount, boo
 
 /*
 	Merges two adjacent groups. The new group size must be a valid size that the scale structure supports.
-	If mergedClockwise is true, the group clockwise to the passed in groupIndex will be consumed.
+	groupIndexConsumed says which of groupIndex / groupIndex - 1 was swallowed; the other one's colour
+	carries on into the merged group.
 	If retaining symmetry, this also effects the group on the other side.
 */
-void ScaleStructure::mergeDegreeGroups(int groupIndex)
+void ScaleStructure::mergeDegreeGroups(int groupIndex, bool groupIndexConsumed)
 {
 	int numGroups = degreeGroupScaleSizes.size();
 	Array<int> newGrouping;
@@ -1533,11 +1558,20 @@ void ScaleStructure::mergeDegreeGroups(int groupIndex)
 		return;
 	}
 
+	// The merged group carries on the colour of whichever side wasn't swallowed (mirrored on the
+	// symmetric side); the swallowed groups' colours are set aside.
+	const int survivor    = groupIndexConsumed ? adjGroupIndex : groupIndex;
+	const int symSurvivor = groupIndexConsumed ? symAdjGroup : symGroupIndex;
+	Array<int> origins;
+
 	for (int i = 0; i < degreeGroupIndexedSizes.size(); i++)
 	{
 
 		if (i == groupIndex)
+		{
 			newGrouping.add(newSizeIndex);
+			origins.add(survivor);
+		}
 
 		else if (i == adjGroupIndex || i == symAdjGroup)
 			continue;
@@ -1550,12 +1584,17 @@ void ScaleStructure::mergeDegreeGroups(int groupIndex)
 			}
 
 			newGrouping.add(newSizeIndex);
+			origins.add(symSurvivor);
 		}
 
 		else
+		{
 			newGrouping.add(degreeGroupIndexedSizes[i]);
+			origins.add(i);
+		}
 	}
 
+	const ScopedValueSetter<Array<int>> originHint(pendingGroupOrigins, origins);
 	setDegreeGrouping(newGrouping);
 }
 
@@ -2109,6 +2148,139 @@ void ScaleStructure::setGroupColour(int groupIndexIn, Colour colourIn)
 		groupColours->resize(groupIndexIn + 1);
 
 	groupColours->set(groupIndexIn, colourIn);
+}
+
+bool ScaleStructure::fillUnassignedGroupColours(const std::function<Colour(int)>& defaultForIndex)
+{
+	if (groupColours == nullptr || !defaultForIndex)
+		return false;
+
+	const int numGroups = degreeGroupings.size();
+	bool changed = false;
+
+	if (groupColours->size() < numGroups)
+	{
+		groupColours->resize(numGroups); // new entries are transparent, filled below
+		changed = true;
+	}
+
+	for (int g = 0; g < numGroups; g++)
+	{
+		if (!groupColours->getReference(g).isTransparent())
+			continue;
+
+		// The first default that no current group is wearing, so a new group never looks like a
+		// neighbour that happens to sit at the index its default would have come from. The bound
+		// only guards against a palette that repeats itself.
+		Colour chosen = defaultForIndex(0);
+		for (int k = 0; k < numGroups * 4 + 16; k++)
+		{
+			const Colour candidate = defaultForIndex(k);
+			bool inUse = false;
+			for (int other = 0; other < numGroups && !inUse; other++)
+				inUse = (other != g && groupColours->getReference(other) == candidate);
+
+			if (!inUse)
+			{
+				chosen = candidate;
+				break;
+			}
+		}
+
+		groupColours->set(g, chosen);
+		changed = true;
+	}
+
+	return changed;
+}
+
+void ScaleStructure::remapGroupColours(const Array<int>& originOfNewGroup, int oldGroupCount)
+{
+	if (groupColours == nullptr)
+		return;
+
+	const Array<Colour> previous = *groupColours;
+	const int numGroups = originOfNewGroup.size();
+
+	Array<Colour> current;
+	current.resize(numGroups); // transparent = no colour yet
+
+	Array<bool> inherited;
+	inherited.insertMultiple(0, false, oldGroupCount);
+
+	for (int n = 0; n < numGroups; n++)
+	{
+		const int origin = originOfNewGroup[n];
+		if (origin >= 0 && origin < oldGroupCount && origin < previous.size() && !inherited[origin])
+		{
+			current.set(n, previous[origin]);
+			inherited.set(origin, true);
+		}
+	}
+
+	// Colours nobody inherited are set aside, most recently dropped first, ahead of whatever was
+	// already set aside. New groups draw from the front, so undoing a merge with a split brings
+	// the swallowed group's colour straight back.
+	Array<Colour> setAside;
+	for (int o = 0; o < oldGroupCount && o < previous.size(); o++)
+		if (!inherited[o] && !previous[o].isTransparent())
+			setAside.add(previous[o]);
+
+	for (int o = oldGroupCount; o < previous.size(); o++)
+		if (!previous[o].isTransparent())
+			setAside.add(previous[o]);
+
+	for (int n = 0; n < numGroups && !setAside.isEmpty(); n++)
+		if (current[n].isTransparent())
+			current.set(n, setAside.removeAndReturn(0));
+
+	// Anything still transparent is left for fillUnassignedGroupColours (the host's palette).
+	current.addArray(setAside);
+	*groupColours = current;
+}
+
+Array<int> ScaleStructure::matchGroupsByOverlap(const Array<Array<int>>& oldGroups, const Array<Array<int>>& newGroups)
+{
+	struct Pair { int shared, newIndex, oldIndex; };
+	std::vector<Pair> pairs;
+
+	for (int n = 0; n < newGroups.size(); n++)
+	{
+		for (int o = 0; o < oldGroups.size(); o++)
+		{
+			int shared = 0;
+			for (auto degree : newGroups.getReference(n))
+				if (oldGroups.getReference(o).contains(degree))
+					shared++;
+
+			if (shared > 0)
+				pairs.push_back({ shared, n, o });
+		}
+	}
+
+	// Most shared degrees first; ties go to the lower new index, then the lower old index.
+	std::stable_sort(pairs.begin(), pairs.end(), [](const Pair& a, const Pair& b)
+	{
+		if (a.shared != b.shared)  return a.shared > b.shared;
+		if (a.newIndex != b.newIndex) return a.newIndex < b.newIndex;
+		return a.oldIndex < b.oldIndex;
+	});
+
+	Array<int> origins;
+	origins.insertMultiple(0, -1, newGroups.size());
+	Array<bool> oldTaken;
+	oldTaken.insertMultiple(0, false, oldGroups.size());
+
+	for (const auto& p : pairs)
+	{
+		if (origins[p.newIndex] >= 0 || oldTaken[p.oldIndex])
+			continue;
+
+		origins.set(p.newIndex, p.oldIndex);
+		oldTaken.set(p.oldIndex, true);
+	}
+
+	return origins;
 }
 
 //==============================================================================

@@ -46,6 +46,26 @@ scale.setDegreeColour(3, juce::Colours::red);   // ByDegree: override; ByGroup: 
 selects `ByGroup` (backward-compatible). Hosts that own/persist colours can call
 `scale.setGroupColourTable(...)` / `scale.setDegreeOverrideTable(...)` directly.
 
+**Group colours follow their groups.** Entries `[0, groups)` of the group table are the current
+groups' colours. Anything past that is set aside, never thrown away.
+- Split: the original group keeps its colour, and the new piece takes a set-aside colour.
+- Merge: the group that wasn't swallowed keeps its colour, and the swallowed one is set aside.
+- Resize: each group keeps the colour of the old group it shares the most degrees with.
+- Period, generator, scale size and offset changes: colours stay by position. Fewer groups sets
+  the extras aside; more groups brings them back.
+
+A group with no colour yet has a transparent entry. A host that owns the table fills those from
+its own palette:
+
+```cpp
+scale.fillUnassignedGroupColours([&](int i) { return myDefaultColourFor(i); });
+```
+
+This picks the first default that no other group is using, and never shrinks the table. Make
+`myDefaultColourFor(i)` return a distinct colour for each `i`, for example by rotating the hue once
+the palette runs out. Otherwise two groups can end up with the same colour. Persist
+the whole table, set-aside entries included, to keep them across sessions.
+
 **In-wheel picker.** Right-clicking a group or degree assigns a colour. By default a built-in
 `juce::ColourSelector` is shown; inject your own picker instead with:
 
