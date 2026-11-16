@@ -84,6 +84,22 @@ circle.setColourPickerLauncher([](juce::Rectangle<int> area, juce::Colour curren
 Colours are intentionally **not** part of the parameter tree; they have their own
 `groupColourChanged` / `degreeColourChanged` notifications on the wheel.
 
+**Saving a design.** The tree also carries the editing rules (`retainGroupingSymmetry`,
+`retainMOSGroupSizes`, `alterationsAttachedToDegree`), so a copy of it is a complete save:
+
+```cpp
+juce::ValueTree saved = scale.getState().createCopy();   // persist e.g. via saved.toXmlString()
+// ...later, into an existing structure (keeps its own backing tree and listeners):
+scale.restoreState(saved);   // false if it isn't a MosScaleStructure with a usable period
+```
+
+A grouping or alteration set that no longer fits the restored scale falls back to the suggested
+one rather than failing the restore.
+
+**Default offset.** Passing a negative offset to `setAll` (as `resetToPeriod` does) picks
+`getSuggestedGeneratorOffset()`: 1 for the fifth-based suggested generator, so the default
+scale is Ionian rather than Lydian, and 0 for any other generator.
+
 ## Display options
 
 `ScaleStructureComponent` exposes toggles (the last four forward to the wheel):

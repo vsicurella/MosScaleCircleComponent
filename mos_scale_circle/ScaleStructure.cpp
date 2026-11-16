@@ -37,7 +37,7 @@ ScaleStructure::ScaleStructure(
 
 void ScaleStructure::resetToPeriod(int periodIn)
 {
-	setAll(periodIn, -1, -1);
+	setAll(periodIn, -1, -1, -1);
 }
 
 void ScaleStructure::setAll(
@@ -87,7 +87,11 @@ void ScaleStructure::setAll(
 	else
 		sizeIndexSelected = sizeIndexIn;
 
-	generatorOffset = jlimit(0, getScaleSize() - 1, generatorOffsetIn);
+	// A negative offset means "nothing has chosen one" - same convention the generator and size
+	// arguments use above.
+	generatorOffset = (generatorOffsetIn < 0)
+		? getSuggestedGeneratorOffset()
+		: jlimit(0, getScaleSize() - 1, generatorOffsetIn);
 
 	calculateGeneratorChain();
 
@@ -495,6 +499,10 @@ void ScaleStructure::attachAlterationsToDegree(bool isAttachedToDegree)
 		// reapply after conversion
 		alterationsAttachedToDegree = isAttachedToDegree;
 		applyChromaAlterations();
+
+		// The stored alterations were re-indexed, so the tree's copy is stale along with the flag.
+		syncStateFromMembers();
+		notifyChange(ScaleStructureIDs::chromaAlterations);
 	}
 }
 
@@ -601,11 +609,16 @@ void ScaleStructure::setGeneratorOffset(int offsetIn)
 void ScaleStructure::setRetainGroupingSymmetry(bool isSymmetric)
 {
 	retainGroupingSymmetry = isSymmetric;
+
+	// A rule, not a parameter: mirror it so a saved state keeps it, but the scale is unchanged so
+	// nobody needs telling.
+	syncStateFromMembers();
 }
 
 void ScaleStructure::setRetainMOSSizes(bool retainSizes)
 {
 	retainMOSGroupSizes = retainSizes;
+	syncStateFromMembers();
 }
 
 bool ScaleStructure::setChromaAlterations(Array<Point<int>> chromaAlterationsIn)
@@ -1567,6 +1580,20 @@ int ScaleStructure::getSuggestedGeneratorIndex()
 	return index;
 }
 
+int ScaleStructure::getSuggestedGeneratorOffset()
+{
+	// Offset 0 takes the scale from the bottom of the generator chain. With a fifth that is
+	// Lydian (12-ET: chain 0,7,2,9,4,11,6 -> 0,2,4,6,7,9,11), and one step up is Ionian
+	// (-> 0,2,4,5,7,9,11), which is what a default major-ish scale is expected to be.
+	//
+	// Only the fifth-based generator gets this: for any other generator the chain is not a
+	// circle of fifths and "one step up" means nothing in particular, so 0 stands.
+	if (generatorIndex < 0 || generatorIndex != getSuggestedGeneratorIndex())
+		return 0;
+
+	return jlimit(0, jmax(0, getScaleSize() - 1), 1);
+}
+
 int ScaleStructure::getSuggestedSizeIndex()
 {
 	int index = -1;
@@ -2135,10 +2162,15 @@ ScaleStructure::ScaleStructure(ValueTree stateIn)
 		: ValueTree(ScaleStructureIDs::MosScaleStructure);
 
 	// Read primary params (with sensible defaults) before listening, then build the model.
+	// The rules go first: they decide how the stored alterations are read.
+	retainGroupingSymmetry      = state.getProperty(ScaleStructureIDs::retainGroupingSymmetry, true);
+	retainMOSGroupSizes         = state.getProperty(ScaleStructureIDs::retainMOSGroupSizes, true);
+	alterationsAttachedToDegree = state.getProperty(ScaleStructureIDs::alterationsAttachedToDegree, false);
+
 	const int p         = state.getProperty(ScaleStructureIDs::period, 12);
 	const int genIdx    = state.getProperty(ScaleStructureIDs::generatorIndex, -1);
 	const int sizeIdx   = state.getProperty(ScaleStructureIDs::sizeIndex, -1);
-	const int offset    = state.getProperty(ScaleStructureIDs::generatorOffset, 0);
+	const int offset    = state.getProperty(ScaleStructureIDs::generatorOffset, -1); // -1 = suggest
 	const int factorIdx = state.getProperty(ScaleStructureIDs::periodFactorIndex, 0);
 	const Array<int> groups            = strToIntArray(state.getProperty(ScaleStructureIDs::degreeGroups, ""));
 	const Array<Point<int>> alterations = strToPointArray(state.getProperty(ScaleStructureIDs::chromaAlterations, ""));
@@ -2175,6 +2207,9 @@ void ScaleStructure::syncStateFromMembers()
 	state.setProperty(ScaleStructureIDs::periodFactorIndex, periodFactorIndexSelected, nullptr);
 	state.setProperty(ScaleStructureIDs::degreeGroups, intArrayToStr(getGroupingIndexedSizes()), nullptr);
 	state.setProperty(ScaleStructureIDs::chromaAlterations, pointArrayToStr(getChromaAlterations()), nullptr);
+	state.setProperty(ScaleStructureIDs::retainGroupingSymmetry, retainGroupingSymmetry, nullptr);
+	state.setProperty(ScaleStructureIDs::retainMOSGroupSizes, retainMOSGroupSizes, nullptr);
+	state.setProperty(ScaleStructureIDs::alterationsAttachedToDegree, alterationsAttachedToDegree, nullptr);
 }
 
 void ScaleStructure::notifyChange(const Identifier& whichParam)
@@ -2214,6 +2249,39 @@ void ScaleStructure::applyStateProperty(const Identifier& p)
 		setDegreeGrouping(strToIntArray(state[p].toString()));
 	else if (p == ScaleStructureIDs::chromaAlterations)
 		setChromaAlterations(strToPointArray(state[p].toString()));
+	else if (p == ScaleStructureIDs::retainGroupingSymmetry)
+		setRetainGroupingSymmetry((bool)state[p]);
+	else if (p == ScaleStructureIDs::retainMOSGroupSizes)
+		setRetainMOSSizes((bool)state[p]);
+	else if (p == ScaleStructureIDs::alterationsAttachedToDegree)
+		attachAlterationsToDegree((bool)state[p]);
+}
+
+bool ScaleStructure::restoreState(const ValueTree& savedState)
+{
+	if (!savedState.hasType(ScaleStructureIDs::MosScaleStructure))
+		return false;
+
+	const int p = savedState.getProperty(ScaleStructureIDs::period, 0);
+	if (p < 1)
+		return false;
+
+	// Set directly rather than through attachAlterationsToDegree(): the saved alterations are
+	// already in this representation, so there is nothing to convert.
+	retainGroupingSymmetry      = savedState.getProperty(ScaleStructureIDs::retainGroupingSymmetry, true);
+	retainMOSGroupSizes         = savedState.getProperty(ScaleStructureIDs::retainMOSGroupSizes, true);
+	alterationsAttachedToDegree = savedState.getProperty(ScaleStructureIDs::alterationsAttachedToDegree, false);
+
+	// setAll syncs the tree and notifies listeners.
+	setAll(p,
+	       savedState.getProperty(ScaleStructureIDs::generatorIndex, -1),
+	       savedState.getProperty(ScaleStructureIDs::sizeIndex, -1),
+	       savedState.getProperty(ScaleStructureIDs::generatorOffset, -1),
+	       savedState.getProperty(ScaleStructureIDs::periodFactorIndex, 0),
+	       strToIntArray(savedState.getProperty(ScaleStructureIDs::degreeGroups).toString()),
+	       strToPointArray(savedState.getProperty(ScaleStructureIDs::chromaAlterations).toString()));
+
+	return true;
 }
 
 void ScaleStructure::valueTreePropertyChanged(ValueTree& tree, const Identifier& property)

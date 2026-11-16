@@ -169,7 +169,9 @@ public:
 	void resetToPeriod(int periodIn);
 
 	/*
-		Set all properties efficiently. If generator, size, or degreeGroups are invalid, the suggested index is used.
+		Set all properties efficiently. If generator, size, or degreeGroups are invalid, the suggested
+		value is used. A negative generatorOffsetIn also means "suggest one"
+		(see getSuggestedGeneratorOffset).
 	*/
 	void setAll(
 		int periodIn,
@@ -410,6 +412,16 @@ public:
 	// Returns the index whose generator is closest to a perfect fifth
 	int getSuggestedGeneratorIndex();
 
+	/*
+		Returns the offset to use when nothing has chosen one.
+
+		Offset 0 starts the scale at the bottom of the generator chain, which for a fifth-generated
+		scale is Lydian - a surprising default. One step up the chain is Ionian, so a fifth-based
+		scale defaults to that instead. Any other generator keeps 0, since "one step up" carries no
+		such meaning there.
+	*/
+	int getSuggestedGeneratorOffset();
+
 	// Returns the index whose size is closest to 7
 	int getSuggestedSizeIndex();
 	int getPrefferedSizeIndex(int prefferedSize, bool preferLarger = true);
@@ -458,7 +470,19 @@ public:
 
 	// The backing state tree (type ScaleStructureIDs::MosScaleStructure). Attach a
 	// ValueTree::Listener to it, persist it, or wire an UndoManager, as needed.
+	// To save a design, store a copy (getState().createCopy()); restore it with restoreState().
 	ValueTree getState() const;
+
+	/*
+		Replays a saved state tree (e.g. a stored getState().createCopy()) into this structure,
+		keeping this structure's own backing tree. The editing rules are applied first, then the
+		parameters go through setAll, so a grouping or alteration set that no longer fits is
+		dropped in favour of the suggested one rather than failing the whole restore.
+
+		Returns false and leaves the structure untouched if the tree is not a MosScaleStructure or
+		carries no usable period.
+	*/
+	bool restoreState(const ValueTree& savedState);
 
 	class Listener
 	{

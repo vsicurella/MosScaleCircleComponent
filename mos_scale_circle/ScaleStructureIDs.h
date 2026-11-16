@@ -30,4 +30,10 @@ namespace ScaleStructureIDs
 
     // Chroma alterations, stored as a comma-separated string of "x:y" points
     static const juce::Identifier chromaAlterations ("chromaAlterations");
+
+    // Editing rules. They don't change the scale itself, but they decide how grouping edits and
+    // the stored chromaAlterations are interpreted, so a saved state needs them to round-trip.
+    static const juce::Identifier retainGroupingSymmetry      ("retainGroupingSymmetry");
+    static const juce::Identifier retainMOSGroupSizes         ("retainMOSGroupSizes");
+    static const juce::Identifier alterationsAttachedToDegree ("alterationsAttachedToDegree");
 }

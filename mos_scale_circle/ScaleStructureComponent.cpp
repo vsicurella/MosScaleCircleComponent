@@ -577,6 +577,11 @@ void ScaleStructureComponent::loadScaleStructureSettings()
 	{
 		periodSelected = scaleStructure.getPeriod();
 
+		// Take the offset from the structure too: the component passes its own copy back into
+		// setAll() on a period change, so leaving it stale here would quietly undo whatever mode
+		// the structure was set to (the suggested Ionian default included).
+		generatorOffset = scaleStructure.getGeneratorOffset();
+
 		periodSlider->setValue(periodSelected, false);
 		periodCents = log2f(periodRatio / scaleStructure.getPeriodFactor()) * 1200;
 		degreeCents = periodCents / periodSelected;
